@@ -1,0 +1,21 @@
+<RCC>
+    <qresource prefix="/">
+        <file>fonts/Commissioner-Variable.ttf</file>
+        <file>icons/dark_mode.svg</file>
+        <file>icons/description.svg</file>
+        <file>icons/home.svg</file>
+        <file>icons/language.svg</file>
+        <file>icons/light_mode.svg</file>
+        <file>icons/pill.svg</file>
+        <file>icons/seizure.svg</file>
+        <file>icons/Trackly.icns</file>
+        <file>icons/logo-trackly-dark.svg</file>
+        <file>icons/logo-trackly-light.svg</file>
+        <file>icons/monitoring.svg</file>
+        <file>icons/warning.svg</file>
+        <file>icons/logo-trackly.svg</file>
+        <file>icons/check.svg</file>
+        <file>icons/person.svg</file>
+        <file>icons/emergency.svg</file>
+    </qresource>
+</RCC>

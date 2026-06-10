@@ -55,6 +55,7 @@ set(APP_SOURCES
 
     src/pages/analyticspage.cpp
     src/pages/triggerspage.cpp
+    src/pages/profilepage.cpp
 
     resources/resources.qrc
 )

@@ -5,6 +5,7 @@
 #include "appcore.h"
 #include "utils.h"
 #include "widgets/toastwidget.h"
+#include "page_includes.h"
 
 #include <QCheckBox>
 #include <QComboBox>

@@ -3,6 +3,7 @@
 
 #include "mainwindow.h"
 #include "appcore.h"
+#include "page_includes.h"
 
 #include <QComboBox>
 #include <QFileDialog>

@@ -2,6 +2,7 @@
 
 #include <QDateTime>
 #include <QLayout>
+#include <QWidget>
 #include <QLayoutItem>
 #include <QObject>
 #include <QRegularExpression>

@@ -107,7 +107,7 @@ QString MainWindow::formatTs(const QString& iso)
 
 void MainWindow::clearLayout(QLayout* layout)
 {
-    clearLayoutHelper(layout);
+    clearLayout(layout);
 }
 
 bool MainWindow::isDarkTheme() const

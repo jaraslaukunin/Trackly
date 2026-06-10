@@ -1,5 +1,5 @@
 // Triggers/Wellbeing page implementation for MainWindow
-// Extracted from mainwindow.cpp
+// Redesigned — beautiful mood selector, sleep slider, chip toggles
 
 #include "mainwindow.h"
 #include "appcore.h"
@@ -11,298 +11,385 @@
 #include <QComboBox>
 #include <QDateTimeEdit>
 #include <QFrame>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSlider>
 #include <QTextEdit>
 #include <QVBoxLayout>
 
-// ---------------------------------------------------------------------------
-// Page creation
-// ---------------------------------------------------------------------------
+// ─── tiny helpers ───────────────────────────────────────────────────────────
+
+static QPushButton* makeChip(const QString& text, const QString& emoji,
+                              QWidget* parent)
+{
+    auto* btn = new QPushButton(QString("%1  %2").arg(emoji, text), parent);
+    btn->setCheckable(true);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setStyleSheet(QString(
+        "QPushButton {"
+        "  background: %1;"
+        "  border: 1px solid %2;"
+        "  border-radius: 20px;"
+        "  padding: 8px 16px;"
+        "  font-size: 13px;"
+        "  font-weight: 600;"
+        "  color: %3;"
+        "}"
+        "QPushButton:checked {"
+        "  background: %4;"
+        "  border-color: %4;"
+        "  color: #FFFFFF;"
+        "}"
+        "QPushButton:hover:!checked {"
+        "  background: %5;"
+        "}"
+    ).arg(
+        "#F1ECFF", "#E2D8FF", "#5C45D3",   // light normal
+        "#7C5CFA",                           // checked
+        "#E8E1FB"                            // hover
+    ));
+    return btn;
+}
+
+static QPushButton* makeMoodBtn(const QString& emoji, int value,
+                                 QWidget* parent)
+{
+    auto* btn = new QPushButton(emoji, parent);
+    btn->setCheckable(true);
+    btn->setFixedSize(56, 56);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setProperty("moodValue", value);
+    btn->setStyleSheet(QString(
+        "QPushButton {"
+        "  font-size: 28px;"
+        "  border: 2px solid transparent;"
+        "  border-radius: 28px;"
+        "  background: transparent;"
+        "}"
+        "QPushButton:checked {"
+        "  border-color: #7C5CFA;"
+        "  background: #F1ECFF;"
+        "}"
+        "QPushButton:hover:!checked {"
+        "  background: #F8F4FF;"
+        "}"
+    ));
+    return btn;
+}
+
+// ─── Page creation ──────────────────────────────────────────────────────────
 
 QWidget* MainWindow::createTriggersPage()
 {
     auto* page = new QWidget;
-    auto* root = new QVBoxLayout(page);
+    auto* root = new QHBoxLayout(page);
     root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(16);
+    root->setSpacing(20);
 
-    // ==== Top: form ====
+    // ═══ LEFT: form ═══════════════════════════════════════════════════════
+    auto* form = new QWidget(page);
+    form->setFixedWidth(380);
+    auto* fl = new QVBoxLayout(form);
+    fl->setContentsMargins(0, 0, 0, 0);
+    fl->setSpacing(14);
 
-    auto* formHost = new QWidget(page);
-    auto* formLayout = new QVBoxLayout(formHost);
-    formLayout->setContentsMargins(0, 0, 0, 0);
-    formLayout->setSpacing(12);
-
-    // 1. Mood
-    auto* moodCard = new QFrame(formHost);
+    // ── Mood card ──────────────────────────────────────────────────────
+    auto* moodCard = new QFrame(form);
     moodCard->setObjectName("SectionCard");
-    auto* moodLayout = new QVBoxLayout(moodCard);
-    moodLayout->setContentsMargins(18, 18, 18, 18);
-    moodLayout->setSpacing(10);
+    auto* moodLay = new QVBoxLayout(moodCard);
+    moodLay->setContentsMargins(20, 20, 20, 20);
+    moodLay->setSpacing(12);
 
-    auto* moodTitle = new QLabel(tr("Сегодняшний настрой"), moodCard);
+    auto* moodTitle = new QLabel(tr("😌  Настроение"), moodCard);
     moodTitle->setObjectName("SectionTitle");
 
     auto* moodRow = new QHBoxLayout;
-    moodRow->setSpacing(10);
+    moodRow->setSpacing(8);
+    moodRow->addStretch();
 
-    m_moodScore = new QComboBox(moodCard);
-    m_moodScore->addItems({
-        tr("1 — очень плохо"),
-        tr("2 — плохо"),
-        tr("3 — нормально"),
-        tr("4 — хорошо"),
-        tr("5 — отлично")
-    });
+    QList<QPushButton*> moodBtns;
+    const QStringList moodEmojis = {"😫", "😟", "😐", "😊", "🤩"};
+    for (int i = 0; i < moodEmojis.size(); ++i) {
+        auto* btn = makeMoodBtn(moodEmojis[i], i + 1, moodCard);
+        if (i == 2) btn->setChecked(true);
+        moodBtns << btn;
+        moodRow->addWidget(btn);
+    }
+    moodRow->addStretch();
+
+    // exclusive group
+    for (auto* b : moodBtns) {
+        QObject::connect(b, &QPushButton::clicked, moodCard, [moodBtns, b]() {
+            for (auto* other : moodBtns)
+                other->setChecked(other == b);
+        });
+    }
+
+    m_moodScore = new QComboBox(moodCard); // hidden, for data storage
+    m_moodScore->hide();
+    m_moodScore->addItems({"1","2","3","4","5"});
     m_moodScore->setCurrentIndex(2);
+    // sync emoji buttons → combo
+    for (auto* b : moodBtns) {
+        QObject::connect(b, &QPushButton::clicked, moodCard, [this, b]() {
+            m_moodScore->setCurrentIndex(b->property("moodValue").toInt() - 1);
+        });
+    }
 
     m_triggerDate = new QDateTimeEdit(QDateTime::currentDateTime(), moodCard);
     m_triggerDate->setCalendarPopup(true);
+    m_triggerDate->setDisplayFormat("dd.MM.yyyy  HH:mm");
 
-    moodRow->addWidget(new QLabel(tr("Настрой"), moodCard));
-    moodRow->addWidget(m_moodScore, 1);
-    moodRow->addSpacing(12);
-    moodRow->addWidget(new QLabel(tr("Дата/время"), moodCard));
-    moodRow->addWidget(m_triggerDate, 1);
+    moodLay->addWidget(moodTitle);
+    moodLay->addLayout(moodRow);
+    moodLay->addWidget(m_triggerDate);
 
-    auto* moodNoteLabel = new QLabel(tr("Коротко опиши своё состояние"), moodCard);
-    moodNoteLabel->setObjectName("MutedLabel");
+    // ── Sleep card ─────────────────────────────────────────────────────
+    auto* sleepCard = new QFrame(form);
+    sleepCard->setObjectName("SectionCard");
+    auto* sleepLay = new QVBoxLayout(sleepCard);
+    sleepLay->setContentsMargins(20, 20, 20, 20);
+    sleepLay->setSpacing(10);
 
-    m_triggerNote = new QTextEdit(moodCard);
-    m_triggerNote->setPlaceholderText(tr("Например: чувствую усталость, немного тревожно"));
+    auto* sleepTitle = new QLabel(tr("😴  Сон"), sleepCard);
+    sleepTitle->setObjectName("SectionTitle");
+
+    auto* sleepVal = new QLabel(tr("8.0 ч"), sleepCard);
+    sleepVal->setObjectName("SummaryValue");
+
+    m_sleepHours = new QDoubleSpinBox(sleepCard);
+    m_sleepHours->setRange(0, 24);
+    m_sleepHours->setValue(8.0);
+    m_sleepHours->setSingleStep(0.5);
+    m_sleepHours->setDecimals(1);
+    m_sleepHours->setPrefix(tr("Часов: "));
+    m_sleepHours->hide();
+
+    auto* sleepSlider = new QSlider(Qt::Horizontal, sleepCard);
+    sleepSlider->setRange(0, 48); // 0–24 in 0.5 steps
+    sleepSlider->setValue(16);    // 8.0
+    sleepSlider->setStyleSheet(
+        "QSlider::groove:horizontal {"
+        "  height: 6px; border-radius: 3px; background: #E4DCF8;"
+        "}"
+        "QSlider::handle:horizontal {"
+        "  width: 18px; height: 18px; margin: -7px 0;"
+        "  border-radius: 9px; background: #7C5CFA;"
+        "}");
+
+    QObject::connect(sleepSlider, &QSlider::valueChanged, sleepCard,
+                     [sleepVal, this](int v) {
+        double h = v / 2.0;
+        sleepVal->setText(QString("%1 ч").arg(h, 0, 'f', 1));
+        m_sleepHours->setValue(h);
+    });
+
+    sleepLay->addWidget(sleepTitle);
+    sleepLay->addWidget(sleepVal);
+    sleepLay->addWidget(sleepSlider);
+
+    // ── Triggers card ──────────────────────────────────────────────────
+    auto* trigCard = new QFrame(form);
+    trigCard->setObjectName("SectionCard");
+    auto* trigLay = new QVBoxLayout(trigCard);
+    trigLay->setContentsMargins(20, 20, 20, 20);
+    trigLay->setSpacing(10);
+
+    auto* trigTitle = new QLabel(tr("⚡  Триггеры"), trigCard);
+    trigTitle->setObjectName("SectionTitle");
+
+    // Chip layout with wrapping
+    auto* chipHost = new QWidget(trigCard);
+    auto* chipGrid = new QGridLayout(chipHost);
+    chipGrid->setContentsMargins(0, 0, 0, 0);
+    chipGrid->setSpacing(8);
+
+    struct ChipDef { QString text; QString emoji; };
+    const QList<ChipDef> chips = {
+        {"Недосып",    "😵"},
+        {"Стресс",     "😰"},
+        {"Пропуск лек.", "💊"},
+        {"Яркий свет", "💡"},
+        {"Громкий шум","🔊"},
+        {"Алкоголь",   "🍷"},
+        {"Погода",     "🌡️"},
+        {"Еда",        "🍕"},
+        {"Экран",      "📱"},
+        {"Другое",     "➕"},
+    };
+
+    QList<QPushButton*> chipBtns;
+    for (int i = 0; i < chips.size(); ++i) {
+        auto* btn = makeChip(chips[i].text, chips[i].emoji, chipHost);
+        chipBtns << btn;
+        chipGrid->addWidget(btn, i / 4, i % 4);
+    }
+
+    trigLay->addWidget(trigTitle);
+    trigLay->addWidget(chipHost);
+
+    // ── Title & Note ───────────────────────────────────────────────────
+    m_triggerTitle = new QLineEdit(form);
+    m_triggerTitle->setPlaceholderText(tr("Короткое название записи"));
+
+    m_triggerNote = new QTextEdit(form);
+    m_triggerNote->setPlaceholderText(tr("Как прошёл день? Что чувствовал?"));
     m_triggerNote->setFixedHeight(80);
 
-    moodLayout->addWidget(moodTitle);
-    moodLayout->addLayout(moodRow);
-    moodLayout->addWidget(moodNoteLabel);
-    moodLayout->addWidget(m_triggerNote);
+    // ── Save button ────────────────────────────────────────────────────
+    auto* saveBtn = new QPushButton(tr("💾  Сохранить"), form);
+    saveBtn->setObjectName("PrimaryButton");
+    saveBtn->setMinimumHeight(48);
+    saveBtn->setCursor(Qt::PointingHandCursor);
 
-    // 2. Symptoms
-    auto* symptomsCard = new QFrame(formHost);
-    symptomsCard->setObjectName("SectionCard");
-    auto* symptomsLayout = new QVBoxLayout(symptomsCard);
-    symptomsLayout->setContentsMargins(18, 18, 18, 18);
-    symptomsLayout->setSpacing(10);
+    // ── Assemble form ──────────────────────────────────────────────────
+    fl->addWidget(moodCard);
+    fl->addWidget(sleepCard);
+    fl->addWidget(trigCard);
+    fl->addWidget(m_triggerTitle);
+    fl->addWidget(m_triggerNote);
+    fl->addWidget(saveBtn);
+    fl->addStretch();
 
-    auto* symptomsTitle = new QLabel(tr("Симптомы"), symptomsCard);
-    symptomsTitle->setObjectName("SectionTitle");
+    // scroll form
+    auto* formScroll = new QScrollArea(page);
+    formScroll->setWidgetResizable(true);
+    formScroll->setFrameShape(QFrame::NoFrame);
+    formScroll->setWidget(form);
+    formScroll->setFixedWidth(400);
 
-    auto* symptomsChips = new QWidget(symptomsCard);
-    auto* symptomsChipsLayout = new QHBoxLayout(symptomsChips);
-    symptomsChipsLayout->setContentsMargins(0, 0, 0, 0);
-    symptomsChipsLayout->setSpacing(8);
-
-    const QStringList symptomOptions = {
-        tr("Головная боль"),
-        tr("Головокружение"),
-        tr("Тошнота"),
-        tr("Сонливость"),
-        tr("Тревога"),
-        tr("Раздражительность")
-    };
-
-    QList<QCheckBox*> symptomChecks;
-    for (const QString& label : symptomOptions) {
-        auto* cb = new QCheckBox(label, symptomsChips);
-        cb->setObjectName("ChipCheckBox");
-        symptomChecks << cb;
-        symptomsChipsLayout->addWidget(cb);
-    }
-
-    auto* otherSymptomRow = new QHBoxLayout;
-    otherSymptomRow->setSpacing(8);
-    auto* otherSymptomLabel = new QLabel(tr("Другой симптом"), symptomsCard);
-    auto* otherSymptomEdit = new QLineEdit(symptomsCard);
-    otherSymptomEdit->setPlaceholderText(tr("Например: онемение, шум в ушах"));
-
-    otherSymptomRow->addWidget(otherSymptomLabel);
-    otherSymptomRow->addWidget(otherSymptomEdit, 1);
-
-    symptomsLayout->addWidget(symptomsTitle);
-    symptomsLayout->addWidget(symptomsChips);
-    symptomsLayout->addLayout(otherSymptomRow);
-
-    // 3. Triggers
-    auto* triggersCard = new QFrame(formHost);
-    triggersCard->setObjectName("SectionCard");
-    auto* triggersLayout = new QVBoxLayout(triggersCard);
-    triggersLayout->setContentsMargins(18, 18, 18, 18);
-    triggersLayout->setSpacing(10);
-
-    auto* triggersTitle = new QLabel(tr("Триггеры"), triggersCard);
-    triggersTitle->setObjectName("SectionTitle");
-
-    auto* triggerChips = new QWidget(triggersCard);
-    auto* triggerChipsLayout = new QHBoxLayout(triggerChips);
-    triggerChipsLayout->setContentsMargins(0, 0, 0, 0);
-    triggerChipsLayout->setSpacing(8);
-
-    const QStringList triggerOptions = {
-        tr("Недосып"),
-        tr("Стресс"),
-        tr("Пропуск лекарства"),
-        tr("Яркий свет"),
-        tr("Шум"),
-        tr("Алкоголь")
-    };
-
-    QList<QCheckBox*> triggerChecks;
-    for (const QString& label : triggerOptions) {
-        auto* cb = new QCheckBox(label, triggerChips);
-        cb->setObjectName("ChipCheckBox");
-        triggerChecks << cb;
-        triggerChipsLayout->addWidget(cb);
-    }
-
-    auto* otherTriggerRow = new QHBoxLayout;
-    otherTriggerRow->setSpacing(8);
-    auto* otherTriggerLabel = new QLabel(tr("Другой триггер"), triggersCard);
-    auto* otherTriggerEdit = new QLineEdit(triggersCard);
-    otherTriggerEdit->setPlaceholderText(tr("Например: жара, сильные запахи"));
-
-    otherTriggerRow->addWidget(otherTriggerLabel);
-    otherTriggerRow->addWidget(otherTriggerEdit, 1);
-
-    triggersLayout->addWidget(triggersTitle);
-    triggersLayout->addWidget(triggerChips);
-    triggersLayout->addLayout(otherTriggerRow);
-
-    // Save button
-    m_saveTriggerBtn = new QPushButton(tr("Сохранить запись"), formHost);
-    m_saveTriggerBtn->setObjectName("PrimaryButton");
-    m_saveTriggerBtn->setIcon(QIcon(":/icons/add_circle.svg"));
-
-    formLayout->addWidget(moodCard);
-    formLayout->addWidget(symptomsCard);
-    formLayout->addWidget(triggersCard);
-    formLayout->addWidget(m_saveTriggerBtn, 0, Qt::AlignRight);
-
-    // ==== Bottom: history ====
-
+    // ═══ RIGHT: history ════════════════════════════════════════════════════
     m_triggerListHost = new QWidget(page);
     m_triggerListHost->setObjectName("TriggerListHost");
     m_triggerListLayout = new QVBoxLayout(m_triggerListHost);
     m_triggerListLayout->setContentsMargins(0, 0, 0, 0);
     m_triggerListLayout->setSpacing(10);
 
-    auto* placeholder = new QLabel(tr("После добавления записей здесь появится история самочувствия."), m_triggerListHost);
+    auto* placeholder = new QLabel(
+        tr("Здесь появится история твоего самочувствия."),
+        m_triggerListHost);
     placeholder->setObjectName("MutedLabel");
     placeholder->setWordWrap(true);
+    placeholder->setAlignment(Qt::AlignCenter);
+    m_triggerListLayout->addStretch();
     m_triggerListLayout->addWidget(placeholder);
     m_triggerListLayout->addStretch();
 
-    auto* scroll = new QScrollArea(page);
-    scroll->setWidgetResizable(true);
-    scroll->setFrameShape(QFrame::NoFrame);
-    scroll->setWidget(m_triggerListHost);
+    auto* histScroll = new QScrollArea(page);
+    histScroll->setWidgetResizable(true);
+    histScroll->setFrameShape(QFrame::NoFrame);
+    histScroll->setWidget(m_triggerListHost);
 
-    auto* contentRow = new QHBoxLayout;
-    contentRow->setSpacing(16);
-    contentRow->addWidget(formHost, 2);
-    contentRow->addWidget(scroll, 3);
+    root->addWidget(formScroll);
+    root->addWidget(histScroll, 1);
 
-    root->addLayout(contentRow, 1);
-
-    // Wire: save selected checkboxes via lambda in submitTriggerWithDetails
-    connect(m_saveTriggerBtn, &QPushButton::clicked, this, [this, symptomChecks, otherSymptomEdit, triggerChecks, otherTriggerEdit]() {
-        QStringList symptoms;
-        for (auto* cb : symptomChecks) {
-            if (cb->isChecked()) symptoms << cb->text().trimmed();
+    // ── Wire save ──────────────────────────────────────────────────────
+    QObject::connect(saveBtn, &QPushButton::clicked, page, [this, chipBtns]() {
+        QStringList selected;
+        for (auto* cb : chipBtns) {
+            if (cb->isChecked())
+                selected << cb->text().section("  ", 1, 1).trimmed();
         }
-        if (!otherSymptomEdit->text().trimmed().isEmpty())
-            symptoms << otherSymptomEdit->text().trimmed();
-
-        QStringList triggers;
-        for (auto* cb : triggerChecks) {
-            if (cb->isChecked()) triggers << cb->text().trimmed();
-        }
-        if (!otherTriggerEdit->text().trimmed().isEmpty())
-            triggers << otherTriggerEdit->text().trimmed();
-
-        submitTriggerWithDetails(symptoms, triggers);
+        submitTrigger(); // sends trigger_title, sleep_hours, trigger_kind, etc.
     });
 
     return page;
 }
 
-// ---------------------------------------------------------------------------
-// Submit
-// ---------------------------------------------------------------------------
+// ─── Submit ─────────────────────────────────────────────────────────────────
 
-void MainWindow::submitTriggerWithDetails(const QStringList& symptoms,
-                                          const QStringList& triggers)
+void MainWindow::submitTriggerWithDetails(const QStringList& /*symptoms*/,
+                                          const QStringList& /*triggers*/)
 {
-    const QString note = m_triggerNote ? m_triggerNote->toPlainText().trimmed() : QString();
+    // kept for compatibility, delegates to submitTrigger
+    submitTrigger();
+}
 
-    if (!m_moodScore) {
-        showToast(m_central, tr("Форма настроения ещё не готова"), ToastKind::Error, 2600);
+void MainWindow::submitTrigger()
+{
+    const QString title = m_triggerTitle ? m_triggerTitle->text().trimmed()
+                                         : QString();
+    const QString note  = m_triggerNote ? m_triggerNote->toPlainText().trimmed()
+                                        : QString();
+
+    if (title.isEmpty()) {
+        showToast(m_central,
+                  tr("Введи название записи"),
+                  ToastKind::Error, 2600);
         return;
     }
 
-    const int moodValue = m_moodScore->currentIndex() + 1;
-    if (moodValue < 1 || moodValue > 5) {
-        showToast(m_central, tr("Выбери настрой от 1 до 5"), ToastKind::Error, 2600);
-        return;
+    // collect checked chips as triggers
+    QStringList chips;
+    // find all chip buttons in the page
+    auto chipBtns = m_triggerNote->parentWidget()
+                        ->findChildren<QPushButton*>();
+    for (auto* btn : chipBtns) {
+        if (btn->isChecked() && btn->isCheckable()
+            && !btn->text().startsWith("😫") && !btn->text().startsWith("😟")
+            && !btn->text().startsWith("😐") && !btn->text().startsWith("😊")
+            && !btn->text().startsWith("🤩"))
+        {
+            QString t = btn->text().section("  ", 1, 1).trimmed();
+            if (!t.isEmpty()) chips << t;
+        }
     }
 
-    if (symptoms.isEmpty() && triggers.isEmpty() && note.isEmpty()) {
-        showToast(m_central, tr("Добавь хотя бы симптом, триггер или комментарий"), ToastKind::Error, 2600);
-        return;
+    QJsonArray triggerArray;
+    for (const auto& t : chips) {
+        triggerArray.append(t);
     }
 
-    QJsonArray symptomsArray;
-    for (const auto& s : symptoms) {
-        const auto st = s.trimmed();
-        if (!st.isEmpty())
-            symptomsArray.append(st);
-    }
-
-    QJsonArray triggersArray;
-    for (const auto& t : triggers) {
-        const auto tt = t.trimmed();
-        if (!tt.isEmpty())
-            triggersArray.append(tt);
-    }
+    const int mood = m_moodScore ? (m_moodScore->currentIndex() + 1) : 3;
+    const double sleepH = m_sleepHours ? m_sleepHours->value() : 8.0;
 
     QJsonObject payload{
-        {"user_id", m_core->currentUserId()},
-        {"logged_at", m_triggerDate->dateTime().toString(Qt::ISODate)},
-        {"mood", moodValue},
-        {"note", note},
-        {"symptoms", symptomsArray},
-        {"triggers", triggersArray}
+        {"user_id",       m_core->currentUserId()},
+        {"logged_at",     m_triggerDate->dateTime().toString(Qt::ISODate)},
+        {"mood",          mood},
+        {"sleep_hours",   sleepH},
+        {"sleep_quality", 3},
+        {"trigger_kind",  QStringLiteral("Общее")},
+        {"trigger_title", title},
+        {"triggers",      triggerArray},
+        {"note",          note},
     };
 
     m_core->createTrigger(payload);
 
+    // reset form
     m_triggerDate->setDateTime(QDateTime::currentDateTime());
-    m_moodScore->setCurrentIndex(2);
-    if (m_triggerNote) m_triggerNote->clear();
+    m_triggerTitle->clear();
+    m_triggerNote->clear();
+
+    showToast(m_central, tr("Запись сохранена! 🎉"), ToastKind::Success, 2000);
 }
 
-// ---------------------------------------------------------------------------
-// List refresh
-// ---------------------------------------------------------------------------
+// ─── List refresh ───────────────────────────────────────────────────────────
 
 void MainWindow::refreshTriggersList()
 {
-    if (!m_triggerListLayout || !m_triggerListHost) {
+    if (!m_triggerListLayout || !m_triggerListHost)
         return;
-    }
 
     ::clearLayout(m_triggerListLayout);
 
     if (m_cachedTriggers.isEmpty()) {
-        auto* empty = new QLabel(tr("После добавления записей здесь появится история самочувствия."), m_triggerListHost);
+        auto* empty = new QLabel(
+            tr("Здесь появится история твоего самочувствия."),
+            m_triggerListHost);
         empty->setObjectName("MutedLabel");
         empty->setWordWrap(true);
+        empty->setAlignment(Qt::AlignCenter);
+        m_triggerListLayout->addStretch();
         m_triggerListLayout->addWidget(empty);
         m_triggerListLayout->addStretch();
         return;
@@ -315,78 +402,86 @@ void MainWindow::refreshTriggersList()
         card->setObjectName("FeedCard");
 
         auto* cl = new QVBoxLayout(card);
-        cl->setContentsMargins(16, 16, 16, 16);
+        cl->setContentsMargins(18, 16, 18, 16);
         cl->setSpacing(8);
 
-        const int mood = o.value("mood").toInt();
-        const double sleepHours = o.value("sleep_hours").toDouble();
-        const int sleepQuality = o.value("sleep_quality").toInt();
+        const int mood           = o.value("mood").toInt();
+        const double sleepHours  = o.value("sleep_hours").toDouble();
+        const QString title      = o.value("trigger_title").toString();
+        const QString kind       = o.value("trigger_kind").toString();
+        const QString noteText   = o.value("note").toString();
+        const QString when       = formatTs(o.value("logged_at").toString());
 
-        auto* title = new QLabel(o.value("trigger_title").toString().trimmed(), card);
-        title->setObjectName("CardTitle");
+        const QStringList moodEmojis = {"😫", "😟", "😐", "😊", "🤩"};
+        const QString moodEmoji = (mood >= 1 && mood <= 5)
+                                      ? moodEmojis[mood - 1] : QString("😐");
 
-        auto* meta = new QLabel(
-            tr("%1 · Настрой %2/5 · Сон %3 ч · Качество сна %4/5")
-                .arg(formatTs(o.value("logged_at").toString()))
-                .arg(mood)
-                .arg(QString::number(sleepHours, 'f', 1))
-                .arg(sleepQuality),
-            card
-            );
-        meta->setObjectName("MutedLabel");
-        meta->setWordWrap(true);
+        // header row: mood + title + date
+        auto* header = new QHBoxLayout;
+        header->setSpacing(10);
 
-        auto* kind = new QLabel(o.value("trigger_kind").toString().trimmed(), card);
-        kind->setObjectName("BadgeLabel");
+        auto* moodLbl = new QLabel(
+            QString("%1  %2/5").arg(moodEmoji).arg(mood), card);
+        moodLbl->setObjectName("BadgeLabel");
 
-        QStringList tags;
+        auto* titleLbl = new QLabel(
+            title.isEmpty() ? kind : title, card);
+        titleLbl->setObjectName("CardTitle");
+
+        header->addWidget(moodLbl);
+        header->addWidget(titleLbl, 1);
+
+        auto* dateLbl = new QLabel(when, card);
+        dateLbl->setObjectName("MutedLabel");
+        header->addWidget(dateLbl);
+
+        cl->addLayout(header);
+
+        // sleep
+        if (sleepHours > 0) {
+            auto* sleepLbl = new QLabel(
+                tr("😴  %1 ч").arg(sleepHours, 0, 'f', 1), card);
+            sleepLbl->setObjectName("MutedLabel");
+            cl->addWidget(sleepLbl);
+        }
+
+        // triggers tags
         const auto arrTags = o.value("triggers").toArray();
-        for (const auto& tv : arrTags) {
-            const QString s = tv.toString().trimmed();
-            if (!s.isEmpty()) {
-                tags << s;
+        if (!arrTags.isEmpty()) {
+            QStringList tags;
+            for (const auto& tv : arrTags) {
+                const QString s = tv.toString().trimmed();
+                if (!s.isEmpty()) tags << s;
+            }
+            if (!tags.isEmpty()) {
+                auto* tagsLbl = new QLabel(
+                    tr("⚡  %1").arg(tags.join("  ·  ")), card);
+                tagsLbl->setObjectName("MutedLabel");
+                tagsLbl->setWordWrap(true);
+                cl->addWidget(tagsLbl);
             }
         }
 
-        if (!tags.isEmpty()) {
-            auto* tagsLabel = new QLabel(tr("Триггеры: %1").arg(tags.join(", ")), card);
-            tagsLabel->setObjectName("MutedLabel");
-            tagsLabel->setWordWrap(true);
-            cl->addWidget(title);
-            cl->addWidget(meta);
-            cl->addWidget(kind, 0, Qt::AlignLeft);
-            cl->addWidget(tagsLabel);
-
-            const QString noteText = o.value("note").toString().trimmed();
-            if (!noteText.isEmpty()) {
-                auto* note = new QLabel(noteText, card);
-                note->setWordWrap(true);
-                cl->addWidget(note);
-            }
-        } else {
-            cl->addWidget(title);
-            cl->addWidget(meta);
-            cl->addWidget(kind, 0, Qt::AlignLeft);
-
-            const QString noteText = o.value("note").toString().trimmed();
-            if (!noteText.isEmpty()) {
-                auto* note = new QLabel(noteText, card);
-                note->setWordWrap(true);
-                cl->addWidget(note);
-            }
+        // note
+        if (!noteText.isEmpty()) {
+            auto* noteLbl = new QLabel(noteText, card);
+            noteLbl->setWordWrap(true);
+            cl->addWidget(noteLbl);
         }
 
-        auto* deleteBtn = new QPushButton(tr("Удалить"), card);
-        deleteBtn->setObjectName("SecondaryButton");
-        connect(deleteBtn, &QPushButton::clicked, this, [this, o]() {
+        // delete
+        auto* delBtn = new QPushButton(tr("Удалить"), card);
+        delBtn->setObjectName("SecondaryButton");
+        delBtn->setFixedWidth(100);
+        QObject::connect(delBtn, &QPushButton::clicked, card, [this, o]() {
             const QString id = o.value("id").toString();
-            if (!id.isEmpty()) {
-                m_core->deleteTrigger(id);
-            }
+            if (!id.isEmpty()) m_core->deleteTrigger(id);
         });
 
-        cl->addSpacing(4);
-        cl->addWidget(deleteBtn, 0, Qt::AlignRight);
+        auto* botRow = new QHBoxLayout;
+        botRow->addStretch();
+        botRow->addWidget(delBtn);
+        cl->addLayout(botRow);
 
         m_triggerListLayout->addWidget(card);
     }
@@ -394,88 +489,24 @@ void MainWindow::refreshTriggersList()
     m_triggerListLayout->addStretch();
 }
 
-// ---------------------------------------------------------------------------
-// Delete
-// ---------------------------------------------------------------------------
+// ─── Delete confirmation ────────────────────────────────────────────────────
 
 void MainWindow::deleteTrigger(const QJsonObject& trigger)
 {
     const QString id = trigger.value("id").toString();
-    if (id.isEmpty())
-        return;
+    if (id.isEmpty()) return;
 
-    const QString title = trigger.value("title").toString().trimmed().isEmpty()
-                              ? trigger.value("kind").toString()
-                              : trigger.value("title").toString();
-
+    const QString title = trigger.value("trigger_title").toString();
     const auto res = QMessageBox::question(
-        this,
-        tr("Удаление"),
-        tr("Удалить запись \"%1\"?").arg(title),
-        QMessageBox::Yes | QMessageBox::No
-        );
+        this, tr("Удаление"),
+        tr("Удалить запись «%1»?").arg(title.isEmpty() ? tr("без названия") : title),
+        QMessageBox::Yes | QMessageBox::No);
 
     if (res == QMessageBox::Yes)
         m_core->deleteTrigger(id);
 }
 
-// ---------------------------------------------------------------------------
-// Legacy submit (unused but kept for compatibility)
-// ---------------------------------------------------------------------------
-
-void MainWindow::submitTrigger()
-{
-    const QString title = m_triggerTitle ? m_triggerTitle->text().trimmed() : QString();
-    const QString note = m_triggerNote ? m_triggerNote->toPlainText().trimmed() : QString();
-    const QString tagsRaw = m_triggerTags ? m_triggerTags->text().trimmed() : QString();
-    const QString kind = m_triggerKind ? m_triggerKind->currentText().trimmed() : QString();
-
-    if (title.isEmpty()) {
-        showToast(m_central, tr("Введите короткое название записи самочувствия"), ToastKind::Error, 2600);
-        return;
-    }
-
-    if (m_sleepHours && m_sleepHours->value() <= 0.0) {
-        showToast(m_central, tr("Укажите количество часов сна"), ToastKind::Error, 2600);
-        return;
-    }
-
-    QJsonArray triggerArray;
-    const QStringList parts = tagsRaw.split(',', Qt::SkipEmptyParts);
-    for (QString part : parts) {
-        part = part.trimmed();
-        if (!part.isEmpty()) {
-            triggerArray.append(part);
-        }
-    }
-
-    QJsonObject payload{
-        {"user_id", m_core->currentUserId()},
-        {"logged_at", m_triggerDate->dateTime().toString(Qt::ISODate)},
-        {"mood", m_moodScore->currentIndex() + 1},
-        {"sleep_hours", m_sleepHours->value()},
-        {"sleep_quality", m_sleepQuality->currentIndex() + 1},
-        {"trigger_kind", kind.isEmpty() ? tr("Общее") : kind},
-        {"trigger_title", title},
-        {"note", note},
-        {"triggers", triggerArray}
-    };
-
-    m_core->createTrigger(payload);
-
-    m_triggerDate->setDateTime(QDateTime::currentDateTime());
-    m_moodScore->setCurrentIndex(2);
-    m_sleepHours->setValue(8.0);
-    m_sleepQuality->setCurrentIndex(2);
-    m_triggerKind->setCurrentIndex(0);
-    m_triggerTitle->clear();
-    m_triggerTags->clear();
-    m_triggerNote->clear();
-}
-
-// ---------------------------------------------------------------------------
-// Data fill
-// ---------------------------------------------------------------------------
+// ─── Data fill ──────────────────────────────────────────────────────────────
 
 void MainWindow::fillTriggers(const QJsonArray& arr)
 {

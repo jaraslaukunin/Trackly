@@ -387,7 +387,7 @@ void MainWindow::submitTrigger()
 
     QJsonObject payload{
         {"user_id",       m_core->currentUserId()},
-        {"logged_at",     m_triggerDate->dateTime().toString(Qt::ISODate)},
+        {"logged_at",     m_triggerDate->dateTime().toUTC().toString(Qt::ISODate)},
         {"mood",          mood},
         {"sleep_hours",   sleepH},
         {"sleep_quality", sleepQ},

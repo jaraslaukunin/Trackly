@@ -191,6 +191,7 @@ private:
     QLineEdit* m_profileDoctor = nullptr;
     QTextEdit* m_profileDiagnosis = nullptr;
     QTimer* m_medReminderTimer = nullptr;
+    QTimer* m_wellbeingReminderTimer = nullptr;
     QJsonObject m_cachedProfile;
 
     QWidget* m_analyticsHost = nullptr;
@@ -279,6 +280,8 @@ private:
 
     void startMedicationReminderLoop();
     void checkMedicationReminders();
+    void startWellbeingReminderLoop();
+    void checkWellbeingReminders();
 
 
     void handleIntakeToggle(QWidget* cell, const QString& targetStatus);

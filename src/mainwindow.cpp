@@ -95,6 +95,7 @@ MainWindow::MainWindow(AppCore* core, QWidget* parent)
     m_core->fetchProfile();
     m_core->fetchAttachments();
     startMedicationReminderLoop();
+    startWellbeingReminderLoop();
 
     connect(m_core, &AppCore::attachmentsReady,
             this, &MainWindow::handleAttachmentsReady);

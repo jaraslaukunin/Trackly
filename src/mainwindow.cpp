@@ -65,301 +65,9 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QDebug>
+#include "widgets/toastwidget.h"
+#include "utils.h"
 
-
-enum class ToastKind {
-    Info,
-    Success,
-    Error
-};
-
-class ToastWidget : public QFrame
-{
-public:
-    ToastWidget(const QString& text, ToastKind kind, QWidget* parent = nullptr)
-        : QFrame(parent)
-    {
-        setObjectName("ToastWidget");
-        setAttribute(Qt::WA_DeleteOnClose);
-        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
-
-        auto* layout = new QHBoxLayout(this);
-        layout->setContentsMargins(14, 12, 14, 12);
-        layout->setSpacing(10);
-
-        auto* dot = new QLabel(this);
-        dot->setFixedSize(10, 10);
-        dot->setStyleSheet(QString("border:none;border-radius:5px;background:%1;")
-                               .arg(kind == ToastKind::Error ? "#D97C88"
-                                    : kind == ToastKind::Success ? "#8A79E8"
-                                                                 : "#9B8CC9"));
-
-        auto* label = new QLabel(text, this);
-        label->setWordWrap(true);
-        label->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
-        QString bg;
-        QString border;
-        QString fg;
-
-        const bool dark = qApp->styleSheet().contains("#17141E");
-
-        if (kind == ToastKind::Error) {
-            bg = dark ? "#3A2430" : "#FFF1F3";
-            border = dark ? "#6F4150" : "#E9C7CF";
-            fg = dark ? "#FFE8EC" : "#6F3240";
-        } else if (kind == ToastKind::Success) {
-            bg = dark ? "#2A233B" : "#F7F4FF";
-            border = dark ? "#4B3D72" : "#DDD3FB";
-            fg = dark ? "#F1EBFF" : "#43306E";
-        } else {
-            bg = dark ? "#282334" : "#FBFAFF";
-            border = dark ? "#433B57" : "#E4DCF8";
-            fg = dark ? "#F1ECFF" : "#34264D";
-        }
-
-        setStyleSheet(QString(
-                          "QFrame#ToastWidget {"
-                          "background:%1;"
-                          "border:1px solid %2;"
-                          "border-radius:16px;"
-                          "}"
-                          "QLabel {"
-                          "background:transparent;"
-                          "color:%3;"
-                          "font-size:13px;"
-                          "font-weight:600;"
-                          "}"
-                          "QToolButton {"
-                          "background:transparent;"
-                          "border:none;"
-                          "color:%3;"
-                          "font-size:16px;"
-                          "font-weight:700;"
-                          "padding:0 2px;"
-                          "}")
-                          .arg(bg, border, fg));
-
-        auto* closeBtn = new QToolButton(this);
-        closeBtn->setText(QStringLiteral("×"));
-        closeBtn->setCursor(Qt::PointingHandCursor);
-        closeBtn->setAutoRaise(true);
-        closeBtn->setStyleSheet(QString(
-                                    "QToolButton {"
-                                    "background:transparent;"
-                                    "border:none;"
-                                    "color:%1;"
-                                    "font-size:16px;"
-                                    "font-weight:700;"
-                                    "padding:0 2px;"
-                                    "}"
-                                    "QToolButton:hover { opacity:0.8; }")
-                                    .arg(fg));
-
-        layout->addWidget(dot, 0, Qt::AlignTop);
-        layout->addWidget(label, 1);
-        layout->addWidget(closeBtn, 0, Qt::AlignTop);
-
-        auto* opacity = new QGraphicsOpacityEffect(this);
-        opacity->setOpacity(0.0);
-        setGraphicsEffect(opacity);
-
-        auto* fadeIn = new QPropertyAnimation(opacity, "opacity", this);
-        fadeIn->setDuration(160);
-        fadeIn->setStartValue(0.0);
-        fadeIn->setEndValue(1.0);
-        fadeIn->start(QAbstractAnimation::DeleteWhenStopped);
-
-        QObject::connect(closeBtn, &QToolButton::clicked, this, [this, opacity]() {
-            auto* fadeOut = new QPropertyAnimation(opacity, "opacity", this);
-            fadeOut->setDuration(140);
-            fadeOut->setStartValue(opacity->opacity());
-            fadeOut->setEndValue(0.0);
-            QObject::connect(fadeOut, &QPropertyAnimation::finished, this, &ToastWidget::close);
-            fadeOut->start(QAbstractAnimation::DeleteWhenStopped);
-        });
-    }
-};
-
-static QString formatIsoToLocal(const QString& iso)
-{
-    if (iso.trimmed().isEmpty()) {
-        return QString();
-    }
-
-    QDateTime dt = QDateTime::fromString(iso, Qt::ISODate);
-    if (!dt.isValid()) {
-        dt = QDateTime::fromString(iso, Qt::ISODateWithMs);
-    }
-    if (!dt.isValid()) {
-        return iso;
-    }
-
-    return dt.toLocalTime().toString("dd.MM.yyyy HH:mm");
-}
-
-static void clearLayoutHelper(QLayout* layout)
-{
-    if (!layout) {
-        return;
-    }
-
-    while (QLayoutItem* item = layout->takeAt(0)) {
-        if (item->widget()) {
-            item->widget()->deleteLater();
-        }
-        if (item->layout()) {
-            clearLayoutHelper(item->layout());
-            delete item->layout();
-        }
-        delete item;
-    }
-}
-
-static QString prettifyError(const QString& raw)
-{
-    QString s = raw.trimmed();
-    if (s.isEmpty()) {
-        return QObject::tr("Произошла ошибка.");
-    }
-
-    s.remove(QRegularExpression("^\\{.*\"message\"\\s*:\\s*\""));
-    s.remove(QRegularExpression("\".*\\}$"));
-    s.replace("\\n", " ");
-    s.replace("\\\"", "\"");
-    s.replace(QRegularExpression("\\s+"), " ");
-    s = s.trimmed();
-
-    if (s.contains("Invalid login credentials", Qt::CaseInsensitive))
-        return QObject::tr("Неверный email или пароль.");
-    if (s.contains("Email not confirmed", Qt::CaseInsensitive))
-        return QObject::tr("Подтверди email перед входом.");
-    if (s.contains("User already registered", Qt::CaseInsensitive))
-        return QObject::tr("Пользователь с таким email уже зарегистрирован.");
-    if (s.contains("duplicate key", Qt::CaseInsensitive))
-        return QObject::tr("Такая запись уже существует.");
-    if (s.contains("JWT", Qt::CaseInsensitive) || s.contains("token", Qt::CaseInsensitive))
-        return QObject::tr("Сессия истекла. Войди снова.");
-    if (s.contains("row-level security", Qt::CaseInsensitive))
-        return QObject::tr("Нет доступа к этой операции. Проверь RLS policy в Supabase.");
-    if (s.contains("violates foreign key constraint", Qt::CaseInsensitive))
-        return QObject::tr("Связанная запись не найдена. Проверь данные в базе.");
-    if (s.contains("Could not find the", Qt::CaseInsensitive))
-        return QObject::tr("В Supabase отсутствует нужная таблица или колонка.");
-    if (s.contains("Failed to fetch", Qt::CaseInsensitive) || s.contains("Network", Qt::CaseInsensitive))
-        return QObject::tr("Не удалось выполнить запрос. Проверь интернет и настройки Supabase.");
-
-    return s.left(240);
-}
-
-static QString successMessageFor(const QString& key)
-{
-    if (key == "seizure") return QObject::tr("Приступ добавлен.");
-    if (key == "medication") return QObject::tr("Лекарство добавлено.");
-    if (key == "medication_log") return QObject::tr("Прием лекарства сохранен.");
-    if (key == "examination") return QObject::tr("Обследование сохранено.");
-    if (key == "attachment") return QObject::tr("Файл загружен.");
-    if (key == "profile") return QObject::tr("Профиль обновлен.");
-    if (key == "emergency_email") return QObject::tr("Экстренное письмо отправлено.");
-    if (key == "trigger") return QObject::tr("Запись самочувствия сохранена.");
-    return QObject::tr("Данные сохранены.");
-}
-
-static QWidget* s_toastHost = nullptr;
-static QVBoxLayout* s_toastLayout = nullptr;
-
-static void ensureToastHost(QWidget* central)
-{
-    if (s_toastHost) {
-        if (s_toastHost->parentWidget() != central) {
-            s_toastHost->setParent(central);
-        }
-        s_toastHost->show();
-        s_toastHost->raise();
-        return;
-    }
-
-    s_toastHost = new QWidget(central);
-    s_toastHost->setObjectName("ToastHost");
-    s_toastHost->setAttribute(Qt::WA_TransparentForMouseEvents, true);
-    s_toastHost->setAttribute(Qt::WA_NoSystemBackground, true);
-    s_toastHost->setAttribute(Qt::WA_TranslucentBackground, true);
-    s_toastHost->setStyleSheet("background: transparent;");
-    s_toastHost->resize(360, 10);
-
-    s_toastLayout = new QVBoxLayout(s_toastHost);
-    s_toastLayout->setContentsMargins(0, 0, 0, 0);
-    s_toastLayout->setSpacing(10);
-    s_toastLayout->addStretch();
-
-    s_toastHost->show();
-    s_toastHost->raise();
-}
-
-static void showToastInternal(QWidget* central, const QString& text, ToastKind kind, int timeoutMs)
-{
-    if (!central) return;
-
-    ensureToastHost(central);
-
-    const int width = 360;
-    const int right = 18;
-    const int top = 18;
-
-    // Перед созданием нового тоста — убираем старые
-    if (s_toastLayout) {
-        while (s_toastLayout->count() > 0) {
-            QLayoutItem* item = s_toastLayout->takeAt(0);
-            if (!item) break;
-            if (QWidget* w = item->widget()) {
-                w->close();
-                w->deleteLater();
-            }
-            delete item;
-        }
-    }
-
-    auto* toast = new ToastWidget(text, kind, s_toastHost);
-    toast->setAttribute(Qt::WA_TransparentForMouseEvents, false);
-
-    s_toastLayout->insertWidget(0, toast);
-    toast->show();
-
-    int totalHeight = 0;
-    for (int i = 0; i < s_toastLayout->count(); ++i) {
-        auto* item = s_toastLayout->itemAt(i);
-        if (item && item->widget() && item->widget()->isVisible()) {
-            totalHeight += item->widget()->sizeHint().height();
-            if (i > 0) totalHeight += s_toastLayout->spacing();
-        }
-    }
-
-    s_toastHost->setGeometry(
-        central->width() - width - right,
-        top,
-        width,
-        qMax(10, totalHeight));
-    s_toastHost->show();
-    s_toastHost->raise();
-    toast->raise();
-
-    QTimer::singleShot(timeoutMs, toast, [toast]() {
-        if (!toast) return;
-
-        auto* effect = qobject_cast<QGraphicsOpacityEffect*>(toast->graphicsEffect());
-        if (!effect) {
-            toast->close();
-            return;
-        }
-
-        auto* fadeOut = new QPropertyAnimation(effect, "opacity", toast);
-        fadeOut->setDuration(180);
-        fadeOut->setStartValue(effect->opacity());
-        fadeOut->setEndValue(0.0);
-        QObject::connect(fadeOut, &QPropertyAnimation::finished, toast, &QWidget::close);
-        fadeOut->start(QAbstractAnimation::DeleteWhenStopped);
-    });
-}
 
 MainWindow::MainWindow(AppCore* core, QWidget* parent)
     : QMainWindow(parent)
@@ -1976,18 +1684,18 @@ void MainWindow::submitTriggerWithDetails(const QStringList& symptoms,
     const QString note = m_triggerNote ? m_triggerNote->toPlainText().trimmed() : QString();
 
     if (!m_moodScore) {
-        showToastInternal(m_central, tr("Форма настроения ещё не готова"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Форма настроения ещё не готова"), ToastKind::Error, 2600);
         return;
     }
 
     const int moodValue = m_moodScore->currentIndex() + 1;
     if (moodValue < 1 || moodValue > 5) {
-        showToastInternal(m_central, tr("Выбери настрой от 1 до 5"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Выбери настрой от 1 до 5"), ToastKind::Error, 2600);
         return;
     }
 
     if (symptoms.isEmpty() && triggers.isEmpty() && note.isEmpty()) {
-        showToastInternal(m_central, tr("Добавь хотя бы симптом, триггер или комментарий"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Добавь хотя бы симптом, триггер или комментарий"), ToastKind::Error, 2600);
         return;
     }
 
@@ -2147,12 +1855,12 @@ void MainWindow::submitSeizureForm()
     const QString notes = m_seizureNotes ? m_seizureNotes->toPlainText().trimmed() : QString();
 
     if (place.isEmpty()) {
-        showToastInternal(m_central, tr("Укажи место приступа"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Укажи место приступа"), ToastKind::Error, 2600);
         return;
     }
 
     if (type.isEmpty()) {
-        showToastInternal(m_central, tr("Укажи тип приступа"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Укажи тип приступа"), ToastKind::Error, 2600);
         return;
     }
 
@@ -2264,21 +1972,21 @@ void MainWindow::submitMedicationForm()
     const QString timesRaw= m_medTimes ? m_medTimes->text().trimmed() : QString();
 
     if (brand.isEmpty() && inn.isEmpty()) {
-        showToastInternal(m_central,
+        showToast(m_central,
                           tr("Укажите бренд или МНН препарата."),
                           ToastKind::Error,
                           2600);
         return;
     }
     if (doseStr.isEmpty()) {
-        showToastInternal(m_central,
+        showToast(m_central,
                           tr("Введите дозу в мг."),
                           ToastKind::Error,
                           2600);
         return;
     }
     if (timesRaw.isEmpty()) {
-        showToastInternal(m_central,
+        showToast(m_central,
                           tr("Укажите время приёмов."),
                           ToastKind::Error,
                           2600);
@@ -2291,7 +1999,7 @@ void MainWindow::submitMedicationForm()
     bool okDoseMg = false;
     const double doseMg = doseNorm.toDouble(&okDoseMg);
     if (!okDoseMg || doseMg <= 0.0) {
-        showToastInternal(m_central,
+        showToast(m_central,
                           tr("Некорректная доза в мг."),
                           ToastKind::Error,
                           2600);
@@ -2313,7 +2021,7 @@ void MainWindow::submitMedicationForm()
             timesArray.append(t);
     }
     if (timesArray.isEmpty()) {
-        showToastInternal(m_central,
+        showToast(m_central,
                           tr("Укажите хотя бы одно корректное время приёма."),
                           ToastKind::Error,
                           2600);
@@ -2358,12 +2066,12 @@ void MainWindow::submitExaminationForm()
     const QString notes   = m_examNotes ? m_examNotes->toPlainText().trimmed() : QString();
 
     if (type.isEmpty()) {
-        showToastInternal(m_central, tr("Укажите тип обследования"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Укажите тип обследования"), ToastKind::Error, 2600);
         return;
     }
 
     if (!m_examDate || !m_examDate->dateTime().isValid()) {
-        showToastInternal(m_central, tr("Укажите дату обследования"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Укажите дату обследования"), ToastKind::Error, 2600);
         return;
     }
 
@@ -3386,24 +3094,24 @@ void MainWindow::buildAuthOverlay()
         const QString password = mauthPasswordEdit ? mauthPasswordEdit->text() : QString();
 
         if (email.isEmpty() || password.isEmpty()) {
-            showToastInternal(m_central, tr("Заполните email и пароль."), ToastKind::Error, 2600);
+            showToast(m_central, tr("Заполните email и пароль."), ToastKind::Error, 2600);
             return;
         }
 
         if (mauthRegisterMode) {
             const QString fullName = mauthNameEdit ? mauthNameEdit->text().trimmed() : QString();
             if (fullName.isEmpty()) {
-                showToastInternal(m_central, tr("Укажите имя."), ToastKind::Error, 2600);
+                showToast(m_central, tr("Укажите имя."), ToastKind::Error, 2600);
                 return;
             }
 
             if (!mauthPolicyCheckbox || !mauthPolicyCheckbox->isChecked()) {
-                showToastInternal(m_central, tr("Подтвердите принятие политики конфиденциальности и условий использования."), ToastKind::Error, 3200);
+                showToast(m_central, tr("Подтвердите принятие политики конфиденциальности и условий использования."), ToastKind::Error, 3200);
                 return;
             }
 
             if (!mauthPersonalDataCheckbox || !mauthPersonalDataCheckbox->isChecked()) {
-                showToastInternal(m_central, tr("Подтвердите согласие на обработку персональных данных."), ToastKind::Error, 3200);
+                showToast(m_central, tr("Подтвердите согласие на обработку персональных данных."), ToastKind::Error, 3200);
                 return;
             }
 
@@ -3429,7 +3137,7 @@ void MainWindow::buildAuthOverlay()
         }
 
         hideAuthOverlay();
-        showToastInternal(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
+        showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
         m_core->fetchDashboard();
         m_core->fetchProfile();
         m_core->fetchTriggers();
@@ -3437,7 +3145,7 @@ void MainWindow::buildAuthOverlay()
     });
 
     connect(m_core, &AppCore::authFailed, this, [this](const QString& e) {
-        showToastInternal(m_central, prettifyError(e), ToastKind::Error, 4200);
+        showToast(m_central, prettifyError(e), ToastKind::Error, 4200);
     });
 
     setAuthRegisterMode(false);
@@ -3731,7 +3439,7 @@ void MainWindow::wire()
     connect(mauthSubmit, &QPushButton::clicked, this, [this] {
         if (mauthRegisterMode) {
             if (mauthAgreeCheckbox && !mauthAgreeCheckbox->isChecked()) {
-                showToastInternal(
+                showToast(
                     m_central,
                     tr("Отметьте согласие с политикой перед регистрацией."),
                     ToastKind::Error,
@@ -3761,7 +3469,7 @@ void MainWindow::wire()
     connect(m_core, &AppCore::authSucceeded, this, [this] {
         setAuthBusy(false);
         hideAuthOverlay();
-        showToastInternal(m_central, tr("Добро пожаловать в Trackly!"),
+        showToast(m_central, tr("Добро пожаловать в Trackly!"),
                           ToastKind::Success, 2200);
     });
 
@@ -3794,7 +3502,7 @@ void MainWindow::wire()
 
     connect(m_core, &AppCore::authFailed, this, [this](const QString& e) {
         setAuthBusy(false);
-        showToastInternal(m_central, prettifyError(e),
+        showToast(m_central, prettifyError(e),
                           ToastKind::Error, 4200);
     });
 
@@ -3813,7 +3521,7 @@ void MainWindow::wire()
     connect(m_core, &AppCore::triggersReady, this, &MainWindow::fillTriggers);
 
     connect(m_core, &AppCore::saveSucceeded, this, [this](const QString& key) {
-        showToastInternal(m_central, successMessageFor(key), ToastKind::Success, 2600);
+        showToast(m_central, successMessageFor(key), ToastKind::Success, 2600);
         m_core->fetchDashboard();
         m_core->fetchProfile();
         m_core->fetchTriggers();
@@ -3824,7 +3532,7 @@ void MainWindow::wire()
             this, [this](const QString& raw) {
                 qDebug() << "Supabase error raw:" << raw;   // <‑‑ добавить эту строку
 
-                showToastInternal(m_central,
+                showToast(m_central,
                                   prettifyError(raw),
                                   ToastKind::Error,
                                   4000);
@@ -5522,7 +5230,7 @@ void MainWindow::createAnalyticsPdfReport()
 
     QPainter painter(&writer);
     if (!painter.isActive()) {
-        showToastInternal(m_central, tr("Не удалось создать PDF"), ToastKind::Error, 3000);
+        showToast(m_central, tr("Не удалось создать PDF"), ToastKind::Error, 3000);
         return;
     }
 
@@ -5609,7 +5317,7 @@ void MainWindow::createAnalyticsPdfReport()
 
     painter.end();
 
-    showToastInternal(m_central, tr("PDF аналитики сохранён"), ToastKind::Success, 2600);
+    showToast(m_central, tr("PDF аналитики сохранён"), ToastKind::Success, 2600);
 }
 
 void MainWindow::refreshTriggersList()
@@ -5747,12 +5455,12 @@ void MainWindow::submitTrigger()
     const QString kind = m_triggerKind ? m_triggerKind->currentText().trimmed() : QString();
 
     if (title.isEmpty()) {
-        showToastInternal(m_central, tr("Введите короткое название записи самочувствия"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Введите короткое название записи самочувствия"), ToastKind::Error, 2600);
         return;
     }
 
     if (m_sleepHours && m_sleepHours->value() <= 0.0) {
-        showToastInternal(m_central, tr("Укажите количество часов сна"), ToastKind::Error, 2600);
+        showToast(m_central, tr("Укажите количество часов сна"), ToastKind::Error, 2600);
         return;
     }
 
@@ -5852,7 +5560,7 @@ void MainWindow::openEmergencyEmail()
                             "Проверьте состояние пользователя и свяжитесь с ним как можно скорее.");
 
     m_core->sendEmergencyEmail(to, patientName, text);
-    showToastInternal(m_central, tr("Запрос на отправку экстренного email отправлен."), ToastKind::Info, 2600);
+    showToast(m_central, tr("Запрос на отправку экстренного email отправлен."), ToastKind::Info, 2600);
 }
 
 void MainWindow::createPdfReport()

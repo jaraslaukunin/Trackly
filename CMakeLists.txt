@@ -41,6 +41,18 @@ set(APP_SOURCES
 
     src/styles.h
 
+    src/utils.cpp
+    src/utils.h
+
+    src/widgets/toastwidget.cpp
+    src/widgets/toastwidget.h
+
+    src/tracklycalendar.cpp
+    src/tracklycalendar.h
+
+    src/examattachmentdroparea.cpp
+    src/examattachmentdroparea.h
+
     resources/resources.qrc
 )
 
@@ -53,9 +65,6 @@ set(APP_TRANSLATIONS
 
 qt_add_executable(TracklyDesktop
     ${APP_SOURCES}
-    src/tracklycalendar.h src/tracklycalendar.cpp
-    src/examattachmentdroparea.h src/examattachmentdroparea.cpp
-
 )
 
 qt_add_translations(TracklyDesktop
@@ -82,4 +91,4 @@ set_target_properties(TracklyDesktop PROPERTIES
 )
 
 set(MACOSX_BUNDLE_ICON_FILE Trackly.icns)
-set_source_files_properties(icons/Trackly.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+set_source_files_properties(resources/icons/Trackly.icns PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")

@@ -61,6 +61,7 @@ set(APP_SOURCES
     src/pages/medicationspage.cpp
     src/pages/examinationspage.cpp
 
+    resources/icons/Trackly.icns
     resources/resources.qrc
 )
 

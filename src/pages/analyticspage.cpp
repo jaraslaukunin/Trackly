@@ -277,7 +277,7 @@ void MainWindow::refreshAnalyticsPage()
     if (!m_analyticsLayout || !m_analyticsHost)
         return;
 
-    clearLayout(m_analyticsLayout);
+    ::clearLayout(m_analyticsLayout);
 
     if (m_cachedSeizureItems.isEmpty() &&
         m_cachedTriggers.isEmpty() &&

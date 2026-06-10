@@ -297,7 +297,7 @@ void MainWindow::refreshTriggersList()
         return;
     }
 
-    clearLayout(m_triggerListLayout);
+    ::clearLayout(m_triggerListLayout);
 
     if (m_cachedTriggers.isEmpty()) {
         auto* empty = new QLabel(tr("После добавления записей здесь появится история самочувствия."), m_triggerListHost);

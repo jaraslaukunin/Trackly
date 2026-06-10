@@ -32,6 +32,7 @@ set(APP_SOURCES
 
     src/appcore.cpp
     src/appcore.h
+    src/appcore_mac.mm
 
     src/mainwindow.cpp
     src/mainwindow.h
@@ -85,6 +86,7 @@ target_link_libraries(TracklyDesktop PRIVATE
     Qt6::Network
     Qt6::Svg
     Qt6::Charts
+    "-framework AppKit"
 )
 
 target_include_directories(TracklyDesktop PRIVATE

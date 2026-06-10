@@ -35,6 +35,7 @@ public:
 
     void applyTheme(ThemeMode mode);
     ThemeMode themeMode() const;
+    void updateApplicationIcon(bool dark);
 
     void applyLanguage(const QString& languageCode);
     QString language() const;

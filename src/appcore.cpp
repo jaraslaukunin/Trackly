@@ -49,6 +49,8 @@ void AppCore::applyTheme(ThemeMode mode)
     }
 
     qApp->setStyleSheet(actual == ThemeMode::Dark ? Styles::darkQss : Styles::lightQss);
+
+    updateApplicationIcon(actual == ThemeMode::Dark);
 }
 
 AppCore::ThemeMode AppCore::themeMode() const

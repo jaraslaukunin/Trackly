@@ -53,6 +53,8 @@ set(APP_SOURCES
     src/examattachmentdroparea.cpp
     src/examattachmentdroparea.h
 
+    src/pages/analyticspage.cpp
+
     resources/resources.qrc
 )
 

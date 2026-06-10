@@ -321,6 +321,17 @@ QWidget* MainWindow::buildTopbar()
     m_title = new QLabel(tr("Дашборд"), bar);
     m_title->setObjectName("PageTitle");
 
+    // Report buttons (visible on dashboard/analytics)
+    m_topbarReportBtn = new QPushButton(tr("Отчёт"), bar);
+    m_topbarReportBtn->setObjectName("SecondaryButton");
+    m_topbarReportBtn->setCursor(Qt::PointingHandCursor);
+    m_topbarReportBtn->hide();
+
+    m_topbarExportPdfBtn = new QPushButton(tr("Экспорт PDF"), bar);
+    m_topbarExportPdfBtn->setObjectName("SecondaryButton");
+    m_topbarExportPdfBtn->setCursor(Qt::PointingHandCursor);
+    m_topbarExportPdfBtn->hide();
+
     m_helpButton = new QToolButton(bar);
     m_helpButton->setObjectName("HelpButton");
     m_helpButton->setIconSize(QSize(18, 18));
@@ -328,7 +339,12 @@ QWidget* MainWindow::buildTopbar()
 
     layout->addWidget(m_title);
     layout->addStretch();
+    layout->addWidget(m_topbarReportBtn);
+    layout->addWidget(m_topbarExportPdfBtn);
     layout->addWidget(m_helpButton);
+
+    QObject::connect(m_topbarReportBtn, &QPushButton::clicked, this, &MainWindow::createPdfReport);
+    QObject::connect(m_topbarExportPdfBtn, &QPushButton::clicked, this, &MainWindow::createAnalyticsPdfReport);
 
     return bar;
 }
@@ -394,6 +410,12 @@ void MainWindow::navigateTo(int index, const QString& title)
 {
     m_stack->setCurrentIndex(index);
     m_title->setText(title);
+
+    // Topbar report buttons visibility
+    if (m_topbarReportBtn)
+        m_topbarReportBtn->setVisible(index == 0);
+    if (m_topbarExportPdfBtn)
+        m_topbarExportPdfBtn->setVisible(index == 4);
 
     if (index == 0) setActiveNav(m_navHome);
     else if (index == 1) setActiveNav(m_navSeizures);

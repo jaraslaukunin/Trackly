@@ -197,6 +197,8 @@ private:
     QWidget* m_analyticsHost = nullptr;
     QVBoxLayout* m_analyticsLayout = nullptr;
     QPushButton* m_exportAnalyticsPdfBtn = nullptr;
+    QPushButton* m_topbarReportBtn = nullptr;
+    QPushButton* m_topbarExportPdfBtn = nullptr;
 
     QComboBox* m_triggerKind = nullptr;
     QDateTimeEdit* m_triggerDate = nullptr;

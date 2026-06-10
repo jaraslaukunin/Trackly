@@ -53,14 +53,6 @@ QWidget* MainWindow::createAnalyticsPage()
     subtitle->setObjectName("MutedLabel");
     subtitle->setWordWrap(true);
 
-    auto* exportRow = new QHBoxLayout;
-    exportRow->addStretch();
-
-    m_exportAnalyticsPdfBtn = new QPushButton(tr("Экспорт PDF"), page);
-    m_exportAnalyticsPdfBtn->setObjectName("SecondaryButton");
-    m_exportAnalyticsPdfBtn->setIcon(QIcon(":/icons/description.svg"));
-    exportRow->addWidget(m_exportAnalyticsPdfBtn);
-
     m_analyticsHost = new QWidget(page);
     m_analyticsHost->setObjectName("AnalyticsHost");
 
@@ -78,11 +70,7 @@ QWidget* MainWindow::createAnalyticsPage()
     scroll->setWidget(m_analyticsHost);
 
     root->addWidget(subtitle);
-    root->addLayout(exportRow);
     root->addWidget(scroll, 1);
-
-    connect(m_exportAnalyticsPdfBtn, &QPushButton::clicked,
-            this, &MainWindow::createAnalyticsPdfReport);
 
     return page;
 }

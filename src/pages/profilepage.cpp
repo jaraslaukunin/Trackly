@@ -304,7 +304,7 @@ void MainWindow::fillProfile(const QJsonObject& obj)
     // Load Gravatar as default avatar
     const QString gravatar = gravatarUrl(email, 256);
     auto* net = new QNetworkAccessManager(this);
-    QNetworkRequest req(QUrl(gravatar));
+    QNetworkRequest req{QUrl(gravatar)};
     auto* reply = net->get(req);
     QObject::connect(reply, &QNetworkReply::finished, this, [this, reply, net]() {
         if (reply->error() == QNetworkReply::NoError) {
@@ -352,7 +352,7 @@ void MainWindow::fillProfile(const QJsonObject& obj)
         // Load Gravatar for sidebar
         const QString gravatarSmall = gravatarUrl(email, 72);
         auto* net2 = new QNetworkAccessManager(this);
-        QNetworkRequest req2(QUrl(gravatarSmall));
+        QNetworkRequest req2{QUrl(gravatarSmall)};
         auto* reply2 = net2->get(req2);
         QObject::connect(reply2, &QNetworkReply::finished, this, [this, reply2, net2]() {
             if (reply2->error() == QNetworkReply::NoError) {

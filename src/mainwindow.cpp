@@ -305,14 +305,19 @@ QWidget* MainWindow::buildSidebar()
     layout->addWidget(m_navTriggers);
     layout->addStretch();
 
-    // Profile widget (in place of navProfile button)
-    auto* profileWidget = new QWidget(m_sidebar);
-    profileWidget->setCursor(Qt::PointingHandCursor);
-    auto* pl = new QHBoxLayout(profileWidget);
-    pl->setContentsMargins(10, 6, 10, 6);
+    // Profile widget — QPushButton containing avatar + email
+    auto* profileBtn = new QPushButton(m_sidebar);
+    profileBtn->setFlat(true);
+    profileBtn->setCursor(Qt::PointingHandCursor);
+    profileBtn->setStyleSheet(
+        "QPushButton { text-align: left; padding: 4px 10px;"
+        " border-radius: 12px; background: transparent; }"
+        "QPushButton:hover { background: #E5DEF8; }");
+    auto* pl = new QHBoxLayout(profileBtn);
+    pl->setContentsMargins(0, 4, 0, 4);
     pl->setSpacing(10);
 
-    m_sidebarAvatar = new QLabel(profileWidget);
+    m_sidebarAvatar = new QLabel(profileBtn);
     m_sidebarAvatar->setFixedSize(36, 36);
     m_sidebarAvatar->setAlignment(Qt::AlignCenter);
     m_sidebarAvatar->setStyleSheet(
@@ -320,26 +325,18 @@ QWidget* MainWindow::buildSidebar()
         " font-size: 16px; color: #7C5CFA; }");
     m_sidebarAvatar->setText("👤");
 
-    m_sidebarEmail = new QLabel(profileWidget);
+    m_sidebarEmail = new QLabel(profileBtn);
     m_sidebarEmail->setStyleSheet("font-size: 11px; color: #786C98; background: transparent;");
 
     pl->addWidget(m_sidebarAvatar);
     pl->addWidget(m_sidebarEmail, 1);
 
-    layout->addWidget(profileWidget);
-
-    // click → navigate to profile
-    connect(profileWidget, &QWidget::customContextMenuRequested, this, nullptr); // dummy
-    profileWidget->installEventFilter(this);
-    // Simpler: use a transparent button overlay
-    auto* profileBtn = new QPushButton(profileWidget);
-    profileBtn->setFixedSize(profileWidget->sizeHint().width(), 48);
-    profileBtn->setStyleSheet("background: transparent; border: none;");
-    profileBtn->setCursor(Qt::PointingHandCursor);
-    connect(profileBtn, &QPushButton::clicked, this, [this]() {
+    QObject::connect(profileBtn, &QPushButton::clicked, this, [this]() {
         navigateTo(6, tr("Профиль"));
         m_core->fetchProfile();
     });
+
+    layout->addWidget(profileBtn);
 
     layout->addWidget(m_themeBtn);
     layout->addWidget(m_languageBtn);

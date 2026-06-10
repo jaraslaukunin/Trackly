@@ -268,6 +268,8 @@ QWidget* MainWindow::buildSidebar()
     makeNav(m_navExams,     tr("Обследования"),   QStringLiteral(":/icons/description.svg"));
     makeNav(m_navAnalytics, tr("Аналитика"),      QStringLiteral(":/icons/monitoring.svg"));
     makeNav(m_navTriggers,  tr("Триггеры"),       QStringLiteral(":/icons/warning.svg"));
+    makeNav(m_navProfile,   tr("Профиль"),        QStringLiteral(":/icons/person.svg"));
+
     // Нижние кнопки: тема и язык
     m_themeBtn = new QPushButton(tr("Тема"), m_sidebar);
     m_themeBtn->setObjectName("SidebarNavButton");
@@ -852,6 +854,8 @@ void MainWindow::buildAuthOverlay()
 
         hideAuthOverlay();
         showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
+        if (m_navProfile)
+            m_navProfile->setText(m_core->currentEmail());
         m_core->fetchDashboard();
         m_core->fetchProfile();
         m_core->fetchTriggers();
@@ -1185,6 +1189,8 @@ void MainWindow::wire()
         hideAuthOverlay();
         showToast(m_central, tr("Добро пожаловать в Trackly!"),
                           ToastKind::Success, 2200);
+        if (m_navProfile)
+            m_navProfile->setText(m_core->currentEmail());
     });
 
     connect(m_core, &AppCore::medicationSchedulesLoaded,

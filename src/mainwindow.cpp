@@ -268,6 +268,7 @@ QWidget* MainWindow::buildSidebar()
     makeNav(m_navExams,     tr("Обследования"),   QStringLiteral(":/icons/description.svg"));
     makeNav(m_navAnalytics, tr("Аналитика"),      QStringLiteral(":/icons/monitoring.svg"));
     makeNav(m_navTriggers,  tr("Триггеры"),       QStringLiteral(":/icons/warning.svg"));
+    // Profile widget — added below instead
     makeNav(m_navProfile,   tr("Профиль"),        QStringLiteral(":/icons/person.svg"));
 
     // Нижние кнопки: тема и язык
@@ -302,8 +303,44 @@ QWidget* MainWindow::buildSidebar()
     layout->addWidget(m_navExams);
     layout->addWidget(m_navAnalytics);
     layout->addWidget(m_navTriggers);
-    layout->addWidget(m_navProfile);
     layout->addStretch();
+
+    // Profile widget (in place of navProfile button)
+    auto* profileWidget = new QWidget(m_sidebar);
+    profileWidget->setCursor(Qt::PointingHandCursor);
+    auto* pl = new QHBoxLayout(profileWidget);
+    pl->setContentsMargins(10, 6, 10, 6);
+    pl->setSpacing(10);
+
+    m_sidebarAvatar = new QLabel(profileWidget);
+    m_sidebarAvatar->setFixedSize(36, 36);
+    m_sidebarAvatar->setAlignment(Qt::AlignCenter);
+    m_sidebarAvatar->setStyleSheet(
+        "QLabel { border-radius: 18px; background: #E4DCF8;"
+        " font-size: 16px; color: #7C5CFA; }");
+    m_sidebarAvatar->setText("👤");
+
+    m_sidebarEmail = new QLabel(profileWidget);
+    m_sidebarEmail->setStyleSheet("font-size: 11px; color: #786C98; background: transparent;");
+
+    pl->addWidget(m_sidebarAvatar);
+    pl->addWidget(m_sidebarEmail, 1);
+
+    layout->addWidget(profileWidget);
+
+    // click → navigate to profile
+    connect(profileWidget, &QWidget::customContextMenuRequested, this, nullptr); // dummy
+    profileWidget->installEventFilter(this);
+    // Simpler: use a transparent button overlay
+    auto* profileBtn = new QPushButton(profileWidget);
+    profileBtn->setFixedSize(profileWidget->sizeHint().width(), 48);
+    profileBtn->setStyleSheet("background: transparent; border: none;");
+    profileBtn->setCursor(Qt::PointingHandCursor);
+    connect(profileBtn, &QPushButton::clicked, this, [this]() {
+        navigateTo(6, tr("Профиль"));
+        m_core->fetchProfile();
+    });
+
     layout->addWidget(m_themeBtn);
     layout->addWidget(m_languageBtn);
 
@@ -484,8 +521,7 @@ void MainWindow::updateIcons()
         m_navTriggers->setIconSize(navSize);
     }
     if (m_navProfile) {
-        m_navProfile->setIcon(makeTintedIcon(":/icons/person.svg", iconColor, navSize));
-        m_navProfile->setIconSize(navSize);
+        m_navProfile->setVisible(false);  // replaced by sidebar profile widget
     }
 
     // Язык и тема в сайдбаре
@@ -853,6 +889,8 @@ void MainWindow::buildAuthOverlay()
 
         hideAuthOverlay();
         showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
+        if (m_sidebarEmail)
+            m_sidebarEmail->setText(m_core->currentEmail());
         m_core->fetchDashboard();
         m_core->fetchProfile();
         m_core->fetchTriggers();
@@ -1186,6 +1224,8 @@ void MainWindow::wire()
         hideAuthOverlay();
         showToast(m_central, tr("Добро пожаловать в Trackly!"),
                           ToastKind::Success, 2200);
+        if (m_sidebarEmail)
+            m_sidebarEmail->setText(m_core->currentEmail());
     });
 
     connect(m_core, &AppCore::medicationSchedulesLoaded,

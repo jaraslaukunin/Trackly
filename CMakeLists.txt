@@ -56,6 +56,10 @@ set(APP_SOURCES
     src/pages/analyticspage.cpp
     src/pages/triggerspage.cpp
     src/pages/profilepage.cpp
+    src/pages/dashboardpage.cpp
+    src/pages/seizurespage.cpp
+    src/pages/medicationspage.cpp
+    src/pages/examinationspage.cpp
 
     resources/resources.qrc
 )

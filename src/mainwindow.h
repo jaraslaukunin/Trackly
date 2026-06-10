@@ -181,8 +181,6 @@ private:
     QDateTime m_pendingExamDate;
 
     QLabel* m_avatarPreview = nullptr;
-    QLabel* m_sidebarAvatar = nullptr;
-    QLabel* m_sidebarEmail = nullptr;
     QLineEdit* m_profileFullName = nullptr;
     QLineEdit* m_profileBirthDate = nullptr;
     QComboBox* m_profileGender = nullptr;

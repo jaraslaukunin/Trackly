@@ -232,8 +232,7 @@ QWidget* MainWindow::createProfilePage()
         payload["address"]          = m_profileAddress->text().trimmed();
         payload["emergency_phone"]  = m_profileEmergency->text().trimmed();
         payload["doctor_name"]      = m_profileDoctor->text().trimmed();
-        payload["status"]           = statusEdit->text().trimmed();
-        payload["about"]            = aboutEdit->toPlainText().trimmed();
+        payload["diagnosis"]        = aboutEdit->toPlainText().trimmed();
         m_core->updateProfile(payload);
     });
 
@@ -301,7 +300,7 @@ void MainWindow::fillProfile(const QJsonObject& obj)
     m_profileEmergency->setText(obj.value("emergency_phone").toString());
     m_profileDoctor->setText(obj.value("doctor_name").toString());
 
-    // Load Gravatar as default avatar
+    // Load Gravatar for profile avatar
     const QString gravatar = gravatarUrl(email, 256);
     auto* net = new QNetworkAccessManager(this);
     QNetworkRequest req{QUrl(gravatar)};
@@ -311,7 +310,6 @@ void MainWindow::fillProfile(const QJsonObject& obj)
             QPixmap px;
             px.loadFromData(reply->readAll());
             if (!px.isNull()) {
-                // Round mask
                 QPixmap rounded(256, 256);
                 rounded.fill(Qt::transparent);
                 QPainter p(&rounded);
@@ -328,54 +326,6 @@ void MainWindow::fillProfile(const QJsonObject& obj)
         reply->deleteLater();
         net->deleteLater();
     });
-
-    // status and about fields — stored in profile data
-    auto* statusEdit = m_profileFullName->parentWidget()
-                           ->findChild<QLineEdit*>();
-    if (statusEdit && statusEdit != m_profileFullName
-        && statusEdit != m_profileBirthDate && statusEdit != m_profilePhone
-        && statusEdit != m_profileAddress && statusEdit != m_profileEmergency
-        && statusEdit != m_profileDoctor)
-    {
-        statusEdit->setText(obj.value("status").toString());
-    }
-
-    auto* aboutEdit = m_profileFullName->parentWidget()
-                          ->findChild<QTextEdit*>();
-    if (aboutEdit) {
-        aboutEdit->setPlainText(obj.value("about").toString());
-    }
-
-    // Update sidebar avatar & email
-    if (m_sidebarAvatar && m_sidebarEmail) {
-        m_sidebarEmail->setText(email);
-        // Load Gravatar for sidebar
-        const QString gravatarSmall = gravatarUrl(email, 72);
-        auto* net2 = new QNetworkAccessManager(this);
-        QNetworkRequest req2{QUrl(gravatarSmall)};
-        auto* reply2 = net2->get(req2);
-        QObject::connect(reply2, &QNetworkReply::finished, this, [this, reply2, net2]() {
-            if (reply2->error() == QNetworkReply::NoError) {
-                QPixmap px;
-                px.loadFromData(reply2->readAll());
-                if (!px.isNull() && m_sidebarAvatar) {
-                    QPixmap rounded(72, 72);
-                    rounded.fill(Qt::transparent);
-                    QPainter p(&rounded);
-                    p.setRenderHint(QPainter::Antialiasing);
-                    QPixmap scaled = px.scaled(72, 72, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-                    p.setBrush(QBrush(scaled));
-                    p.setPen(Qt::NoPen);
-                    p.drawEllipse(0, 0, 72, 72);
-                    p.end();
-                    m_sidebarAvatar->setPixmap(rounded.scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-                    m_sidebarAvatar->setText(""); // clear emoji
-                }
-            }
-            reply2->deleteLater();
-            net2->deleteLater();
-        });
-    }
 
     refreshAnalyticsPage();
 }

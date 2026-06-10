@@ -17,3 +17,4 @@ public:
 };
 
 void showToast(QWidget* central, const QString& text, ToastKind kind, int timeoutMs = 2600);
+void repositionToast(QWidget* central);

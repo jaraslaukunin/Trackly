@@ -73,7 +73,7 @@ MainWindow::MainWindow(AppCore* core, QWidget* parent)
     : QMainWindow(parent)
     , m_core(core)
 {
-    setWindowTitle("TRACKLY DEBUG BUILD !!!");
+    setWindowTitle("Trackly");
 
     buildUi();
     buildHelpOverlay();
@@ -1386,14 +1386,7 @@ void MainWindow::resizeEvent(QResizeEvent* event)
         mauthOverlay->setGeometry(m_central->rect());
     }
 
-    if (s_toastHost && s_toastHost->parentWidget() == m_central) {
-        const int width = 360;
-        const int right = 18;
-        const int top = 18;
-        s_toastHost->move(m_central->width() - width - right, top);
-        s_toastHost->resize(width, s_toastHost->height());
-        s_toastHost->raise();
-    }
+    repositionToast(m_central);
 
     if (mauthOverlay && mauthLangBtn) {
         const int margin = 18;

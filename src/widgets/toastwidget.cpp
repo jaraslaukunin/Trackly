@@ -196,6 +196,18 @@ void showToast(QWidget* central, const QString& text, ToastKind kind, int timeou
     s_toastHost->raise();
     toast->raise();
 
+void repositionToast(QWidget* central)
+{
+    if (!s_toastHost || !central) return;
+
+    const int width = 360;
+    const int right = 18;
+    const int top = 18;
+    s_toastHost->move(central->width() - width - right, top);
+    s_toastHost->resize(width, s_toastHost->height());
+    s_toastHost->raise();
+}
+
     QTimer::singleShot(timeoutMs, toast, [toast]() {
         if (!toast) return;
 

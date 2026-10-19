@@ -51,6 +51,7 @@
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QPdfWriter>
+#include <QPageLayout>
 #include <QPageSize>
 #include <QPainter>
 #include <QtCharts/QChartView>
@@ -85,11 +86,19 @@ MainWindow::MainWindow(AppCore* core, QWidget* parent)
     updateIcons();
     m_trayIcon = new QSystemTrayIcon(this);
     m_trayIcon->setIcon(QIcon(":/icons/pill.svg"));
+    m_trayIcon->setToolTip(tr("Trackly — напоминания о приёме"));
     m_trayIcon->show();
+
+    // проверяем что иконка показалась
+    qDebug() << "Tray icon visible:" << m_trayIcon->isVisible()
+             << "supports messages:" << m_trayIcon->supportsMessages();
 
     m_core->fetchMedications();
     m_core->fetchMedicationSchedules();
     m_core->fetchMedicationLogs();
+    m_core->fetchSeizures();
+    m_core->fetchExaminations();
+    m_core->fetchTriggers();
 
     m_core->fetchDashboard();
     m_core->fetchProfile();
@@ -170,6 +179,7 @@ QWidget* MainWindow::makeSummaryCard(const QString& title, const QString& body, 
 
     auto* t = new QLabel(title, card);
     t->setObjectName("SummaryTitle");
+    t->setProperty("origKey", title);  // для retranslateUi
 
     auto* v = new QLabel(body, card);
     v->setObjectName("SummaryValue");
@@ -267,7 +277,7 @@ QWidget* MainWindow::buildSidebar()
     makeNav(m_navMeds,      tr("Терапия"),        QStringLiteral(":/icons/pill.svg"));
     makeNav(m_navExams,     tr("Обследования"),   QStringLiteral(":/icons/description.svg"));
     makeNav(m_navAnalytics, tr("Аналитика"),      QStringLiteral(":/icons/monitoring.svg"));
-    makeNav(m_navTriggers,  tr("Триггеры"),       QStringLiteral(":/icons/warning.svg"));
+    makeNav(m_navTriggers,  tr("Самочувствие"),   QStringLiteral(":/icons/warning.svg"));
     makeNav(m_navProfile,   tr("Профиль"),        QStringLiteral(":/icons/person.svg"));
 
     // Нижние кнопки: тема и язык
@@ -325,26 +335,38 @@ QWidget* MainWindow::buildTopbar()
     m_topbarReportBtn = new QPushButton(tr("Отчёт"), bar);
     m_topbarReportBtn->setObjectName("SecondaryButton");
     m_topbarReportBtn->setCursor(Qt::PointingHandCursor);
+    m_topbarReportBtn->setMinimumHeight(32);
     m_topbarReportBtn->hide();
 
     m_topbarExportPdfBtn = new QPushButton(tr("Экспорт PDF"), bar);
     m_topbarExportPdfBtn->setObjectName("SecondaryButton");
     m_topbarExportPdfBtn->setCursor(Qt::PointingHandCursor);
+    m_topbarExportPdfBtn->setMinimumHeight(32);
     m_topbarExportPdfBtn->hide();
+
+    m_topbarAiBtn = new QPushButton(tr("AI"), bar);
+    m_topbarAiBtn->setObjectName("SecondaryButton");
+    m_topbarAiBtn->setCursor(Qt::PointingHandCursor);
+    m_topbarAiBtn->setToolTip(tr("AI-анализ (ChatGPT)"));
+    m_topbarAiBtn->setMinimumHeight(32);
+    m_topbarAiBtn->hide();
 
     m_helpButton = new QToolButton(bar);
     m_helpButton->setObjectName("HelpButton");
-    m_helpButton->setIconSize(QSize(18, 18));
+    m_helpButton->setIconSize(QSize(20, 20));
+    m_helpButton->setMinimumHeight(32);
     m_helpButton->setToolTip(tr("Памятка при приступе"));
 
     layout->addWidget(m_title);
     layout->addStretch();
     layout->addWidget(m_topbarReportBtn);
     layout->addWidget(m_topbarExportPdfBtn);
+    layout->addWidget(m_topbarAiBtn);
     layout->addWidget(m_helpButton);
 
     QObject::connect(m_topbarReportBtn, &QPushButton::clicked, this, &MainWindow::createPdfReport);
-    QObject::connect(m_topbarExportPdfBtn, &QPushButton::clicked, this, &MainWindow::createAnalyticsPdfReport);
+    QObject::connect(m_topbarExportPdfBtn, &QPushButton::clicked, this, &MainWindow::showReportDialog);
+    QObject::connect(m_topbarAiBtn, &QPushButton::clicked, this, &MainWindow::showAiAnalyticsDialog);
 
     return bar;
 }
@@ -416,6 +438,8 @@ void MainWindow::navigateTo(int index, const QString& title)
         m_topbarReportBtn->setVisible(index == 0);
     if (m_topbarExportPdfBtn)
         m_topbarExportPdfBtn->setVisible(index == 4);
+    if (m_topbarAiBtn)
+        m_topbarAiBtn->setVisible(index == 4);
 
     if (index == 0) setActiveNav(m_navHome);
     else if (index == 1) setActiveNav(m_navSeizures);
@@ -455,12 +479,11 @@ void MainWindow::updateSidebarUi()
 
     for (auto* btn : navs) {
         if (!btn) continue;
-        const QString full = btn->property("fullText").toString().isEmpty()
-                                 ? btn->text()
-                                 : btn->property("fullText").toString();
-        btn->setProperty("fullText", full);
-        btn->setText(full);
-        btn->setToolTip(full);
+        const QString text = btn->text();
+        if (!text.isEmpty()) {
+            btn->setProperty("fullText", text);
+            btn->setToolTip(text);
+        }
     }
 }
 
@@ -548,50 +571,82 @@ void MainWindow::buildHelpOverlay()
 
     m_helpCard = new QFrame(m_helpOverlay);
     m_helpCard->setObjectName("HelpOverlayCard");
-    m_helpCard->setFixedWidth(520);
+    m_helpCard->setFixedWidth(480);
 
     auto* cardLayout = new QVBoxLayout(m_helpCard);
-    cardLayout->setContentsMargins(24, 24, 24, 24);
-    cardLayout->setSpacing(12);
+    cardLayout->setContentsMargins(28, 24, 28, 20);
+    cardLayout->setSpacing(0);
 
+    // ── Title ──
     auto* title = new QLabel(tr("Памятка при приступе"), m_helpCard);
     title->setObjectName("SectionTitle");
 
-    m_helpTextLabel = new QLabel(
-        tr("1. Уберите опасные предметы и поддержите голову.\n"
-           "2. Не сдерживайте судороги и ничего не кладите в рот.\n"
-           "3. Поверните человека на бок после окончания приступа.\n"
-           "4. Засеките длительность приступа.\n"
-           "5. Вызывайте 103/112, если приступ длится более 5 минут, повторяется подряд "
-           "или человек получил травму."),
-        m_helpCard);
-    m_helpTextLabel->setObjectName("HelpOverlayText");
-    m_helpTextLabel->setWordWrap(true);
+    cardLayout->addWidget(title);
 
+    auto* subtitle = new QLabel(tr("Что делать, если у человека рядом с вами начался приступ"), m_helpCard);
+    subtitle->setObjectName("MutedLabel");
+    subtitle->setWordWrap(true);
+
+    cardLayout->addWidget(subtitle);
+
+    // ── Steps ──
+    auto makeStep = [&](int num, const QString& text) {
+        auto* stepRow = new QHBoxLayout;
+        stepRow->setSpacing(12);
+        stepRow->setContentsMargins(0, 0, 0, 0);
+
+        auto* circle = new QLabel(QString::number(num), m_helpCard);
+        circle->setFixedSize(26, 26);
+        circle->setAlignment(Qt::AlignCenter);
+        circle->setStyleSheet(
+            "QLabel { background:#7C5CFA;color:white;border-radius:13px;"
+            "font-size:13px;font-weight:700; }");
+
+        auto* stepText = new QLabel(text, m_helpCard);
+        stepText->setObjectName("HelpStepText");
+        stepText->setWordWrap(true);
+
+        stepRow->addWidget(circle, 0, Qt::AlignTop);
+        stepRow->addWidget(stepText, 1);
+        return stepRow;
+    };
+
+    cardLayout->addLayout(makeStep(1, tr("Уберите опасные предметы и поддержите голову.")));
+    cardLayout->addSpacing(10);
+    cardLayout->addLayout(makeStep(2, tr("Не сдерживайте судороги и ничего не кладите в рот.")));
+    cardLayout->addSpacing(10);
+    cardLayout->addLayout(makeStep(3, tr("Поверните человека на бок после окончания приступа.")));
+    cardLayout->addSpacing(10);
+    cardLayout->addLayout(makeStep(4, tr("Засеките длительность приступа.")));
+    cardLayout->addSpacing(14);
+
+    // ── Warning note ──
+    m_helpTextLabel = new QLabel(m_helpCard);
+    m_helpTextLabel->setObjectName("HelpOverlayWarning");
+    m_helpTextLabel->setWordWrap(true);
+    m_helpTextLabel->setText(
+        tr("Вызывайте 103 или 112, если приступ длится более 5 минут, "
+           "повторяется подряд или человек получил травму."));
+
+    cardLayout->addWidget(m_helpTextLabel);
+    cardLayout->addSpacing(18);
+
+    // ── Actions ──
     auto* actions = new QHBoxLayout;
     actions->setSpacing(10);
 
-    m_helpCallBtn = new QPushButton(tr("Позвонить"), m_helpCard);
-    m_helpCallBtn->setObjectName("SecondaryButton");
-
-    m_helpSmsBtn = new QPushButton(tr("SMS"), m_helpCard);
-    m_helpSmsBtn->setObjectName("SecondaryButton");
-
-    m_helpMailBtn = new QPushButton(tr("Email"), m_helpCard);
-    m_helpMailBtn->setObjectName("PrimaryButton");
+    m_helpMailBtn = new QPushButton(tr("Экстренное уведомление"), m_helpCard);
+    m_helpMailBtn->setObjectName("DangerButton");
+    m_helpMailBtn->setMinimumHeight(42);
+    m_helpMailBtn->setCursor(Qt::PointingHandCursor);
 
     auto* closeBtn = new QPushButton(tr("Понятно"), m_helpCard);
-    closeBtn->setObjectName("SecondaryButton");
+    closeBtn->setObjectName("PrimaryButton");
+    closeBtn->setMinimumHeight(42);
+    closeBtn->setCursor(Qt::PointingHandCursor);
 
-    actions->addWidget(m_helpCallBtn);
-    actions->addWidget(m_helpSmsBtn);
-    actions->addWidget(m_helpMailBtn);
-    actions->addStretch();
-    actions->addWidget(closeBtn);
-
-    cardLayout->addWidget(title);
-    cardLayout->addWidget(m_helpTextLabel);
-    cardLayout->addSpacing(8);
+    actions->addWidget(m_helpMailBtn, 1);
+    actions->addWidget(closeBtn, 1);
     cardLayout->addLayout(actions);
 
     row->addWidget(m_helpCard);
@@ -601,8 +656,6 @@ void MainWindow::buildHelpOverlay()
     layout->addStretch();
 
     connect(closeBtn, &QPushButton::clicked, this, &MainWindow::hideHelpOverlay);
-    connect(m_helpCallBtn, &QPushButton::clicked, this, &MainWindow::openEmergencyCall);
-    connect(m_helpSmsBtn, &QPushButton::clicked, this, &MainWindow::openEmergencySms);
     connect(m_helpMailBtn, &QPushButton::clicked, this, &MainWindow::openEmergencyEmail);
 
     m_helpOverlay->setGeometry(m_central->rect());
@@ -783,6 +836,47 @@ void MainWindow::buildAuthOverlay()
     cardLayout->addWidget(mauthSubmit);
     cardLayout->addWidget(mauthSwitch);
 
+    // ── Verification widgets (hidden until needed) ──
+    mauthCodeHint = new QLabel(tr("На указанную почту отправлен 6-значный код. Введите его ниже:"), mauthCard);
+    mauthCodeHint->setObjectName("AuthOverlaySubtitle");
+    mauthCodeHint->setWordWrap(true);
+
+    mauthCodeEdit = new QLineEdit(mauthCard);
+    mauthCodeEdit->setPlaceholderText("000000");
+    mauthCodeEdit->setMaxLength(6);
+    mauthCodeEdit->setAlignment(Qt::AlignCenter);
+    mauthCodeEdit->setStyleSheet(
+        "QLineEdit { font-size:24px; font-weight:700; letter-spacing:8px;"
+        " border:2px solid #E4DCF8; border-radius:12px; padding:12px 16px;"
+        " background:#FBFAFF; color:#2B2144; }"
+        "QLineEdit:focus { border-color:#7C5CFA; }");
+
+    mauthVerifyBtn = new QPushButton(tr("Подтвердить"), mauthCard);
+    mauthVerifyBtn->setObjectName("PrimaryButton");
+
+    auto* verRow = new QHBoxLayout;
+    verRow->setSpacing(10);
+    mauthResendBtn = new QPushButton(tr("Отправить ещё раз"), mauthCard);
+    mauthResendBtn->setObjectName("SecondaryButton");
+    mauthResendBtn->setMinimumHeight(36);
+    mauthBackBtn = new QPushButton(tr("← Назад ко входу"), mauthCard);
+    mauthBackBtn->setObjectName("SecondaryButton");
+    mauthBackBtn->setMinimumHeight(36);
+    verRow->addWidget(mauthResendBtn, 1);
+    verRow->addWidget(mauthBackBtn, 1);
+
+    cardLayout->addWidget(mauthCodeHint);
+    cardLayout->addWidget(mauthCodeEdit);
+    cardLayout->addWidget(mauthVerifyBtn);
+    cardLayout->addLayout(verRow);
+
+    // hide verification by default
+    mauthCodeHint->hide();
+    mauthCodeEdit->hide();
+    mauthVerifyBtn->hide();
+    mauthResendBtn->hide();
+    mauthBackBtn->hide();
+
     row->addWidget(mauthCard);
     row->addStretch();
 
@@ -802,8 +896,8 @@ void MainWindow::buildAuthOverlay()
         if (now == QStringLiteral("ru"))
             m_core->applyLanguage(QStringLiteral("be"));
         else if (now == QStringLiteral("be"))
-            m_core->applyLanguage(QStringLiteral("be-Latn"));
-        else if (now == QStringLiteral("be-Latn"))
+            m_core->applyLanguage(QStringLiteral("be_Latn"));
+        else if (now == QStringLiteral("be_Latn"))
             m_core->applyLanguage(QStringLiteral("en"));
         else
             m_core->applyLanguage(QStringLiteral("ru"));
@@ -853,7 +947,13 @@ void MainWindow::buildAuthOverlay()
                 return;
             }
 
-            m_core->signUp(email, password, fullName);
+            // Сохраняем данные и отправляем код (аккаунт НЕ создаётся)
+            mauthPendingEmail = email;
+            mauthPendingPassword = password;
+            mauthPendingName = fullName;
+            mauthAwaitingVerification = true; // блокируем любой authSucceeded
+            m_core->sendVerificationCode(email, fullName);
+            setVerificationMode(true);
             return;
         }
 
@@ -861,27 +961,87 @@ void MainWindow::buildAuthOverlay()
     });
 
     connect(m_core, &AppCore::authSucceeded, this, [this]() {
-        if (mauthRegisterMode) {
-            QJsonObject payload{
-                { "id", m_core->currentUserId() },
-                { "email", m_core->currentEmail() },
-                { "fullname", mauthNameEdit ? mauthNameEdit->text().trimmed() : QString() },
-                { "accepted_privacy_policy", true },
-                { "accepted_terms_of_service", true },
-                { "accepted_personal_data_processing", true },
-                { "consent_accepted_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) }
-            };
-            m_core->updateProfile(payload);
+        // Ничего не делаем пока ждём код
+        if (mauthAwaitingVerification) {
+            qDebug() << "AUTH BLOCKED — waiting for verification code";
+            return;
         }
 
-        hideAuthOverlay();
-        showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
-        if (m_navProfile)
-            m_navProfile->setText(m_core->currentEmail());
-        m_core->fetchDashboard();
-        m_core->fetchProfile();
-        m_core->fetchTriggers();
-        navigateTo(0, tr("Главная"));
+        if (mauthRegisterMode) {
+            // Аккаунт создан после верификации кода — заполняем профиль
+            mauthRegisterMode = false;
+            if (m_core->isAuthenticated()) {
+                QJsonObject payload{
+                    { "id", m_core->currentUserId() },
+                    { "email", m_core->currentEmail() },
+                    { "full_name", mauthPendingName },
+                    { "accepted_privacy_policy", true },
+                    { "accepted_terms_of_service", true },
+                    { "accepted_personal_data_processing", true },
+                    { "consent_accepted_at", QDateTime::currentDateTimeUtc().toString(Qt::ISODate) }
+                };
+                m_core->updateProfile(payload);
+            }
+            setVerificationMode(false);
+            hideAuthOverlay();
+            showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
+            if (m_navProfile)
+                m_navProfile->setText(m_core->currentEmail().section('@', 0, 0));
+            m_core->fetchDashboard();
+            m_core->fetchTriggers();
+            navigateTo(0, tr("Главная"));
+        } else {
+            hideAuthOverlay();
+            showToast(m_central, tr("Добро пожаловать в Trackly."), ToastKind::Success, 2200);
+            if (m_navProfile)
+                m_navProfile->setText(m_core->currentEmail().section('@', 0, 0));
+            m_core->fetchDashboard();
+            m_core->fetchTriggers();
+            navigateTo(0, tr("Главная"));
+        }
+    });
+
+    // ── Verification signal handlers ──
+    connect(m_core, &AppCore::verificationCodeSent, this, [this]() {
+        showToast(m_central, tr("Код отправлен на %1").arg(mauthPendingEmail), ToastKind::Success, 2600);
+    });
+
+    connect(m_core, &AppCore::verificationCodeError, this, [this](const QString& e) {
+        showToast(m_central, e, ToastKind::Error, 4000);
+    });
+
+    connect(m_core, &AppCore::codeVerified, this, [this]() {
+        showToast(m_central, tr("Код подтверждён!"), ToastKind::Success, 2200);
+        mauthAwaitingVerification = false; // разблокируем — сейчас будет signUp → authSucceeded
+        // Создаём аккаунт только сейчас (после верификации)
+        m_core->signUp(mauthPendingEmail, mauthPendingPassword, mauthPendingName);
+    });
+
+    connect(m_core, &AppCore::codeVerifyError, this, [this](const QString& e) {
+        showToast(m_central, tr("❌ %1").arg(prettifyError(e)), ToastKind::Error, 4000);
+    });
+
+    // ── Verification UI handlers ──
+    connect(mauthVerifyBtn, &QPushButton::clicked, this, [this]() {
+        const QString code = mauthCodeEdit ? mauthCodeEdit->text().trimmed() : QString();
+        if (code.length() != 6) {
+            showToast(m_central, tr("Введите 6-значный код."), ToastKind::Error, 2600);
+            return;
+        }
+        m_core->verifyCode(mauthPendingEmail, code);
+    });
+
+    connect(mauthResendBtn, &QPushButton::clicked, this, [this]() {
+        m_core->sendVerificationCode(mauthPendingEmail, mauthPendingName);
+    });
+
+    connect(mauthBackBtn, &QPushButton::clicked, this, [this]() {
+        mauthAwaitingVerification = false;
+        setVerificationMode(false);
+        setAuthRegisterMode(false);
+        mauthEmailEdit->setText(mauthPendingEmail);
+        mauthPasswordEdit->clear();
+        mauthCodeEdit->clear();
     });
 
     connect(m_core, &AppCore::authFailed, this, [this](const QString& e) {
@@ -1022,6 +1182,37 @@ void MainWindow::setAuthBusy(bool busy)
     }
 }
 
+void MainWindow::setVerificationMode(bool enabled)
+{
+    mauthVerificationMode = enabled;
+
+    const bool ver = enabled;
+    // Hide normal auth form
+    if (mauthNameEdit) mauthNameEdit->setVisible(!ver && mauthRegisterMode);
+    if (mauthEmailEdit) mauthEmailEdit->setVisible(!ver);
+    if (mauthPasswordEdit) mauthPasswordEdit->setVisible(!ver);
+    if (mauthSubmit) mauthSubmit->setVisible(!ver);
+    if (mauthSwitch) mauthSwitch->setVisible(!ver);
+    // Hide consent
+    if (auto consentHost = mauthPolicyCheckbox ? mauthPolicyCheckbox->parentWidget() : nullptr)
+        consentHost->setVisible(!ver && mauthRegisterMode);
+
+    // Show/hide verification widgets
+    if (mauthCodeHint) mauthCodeHint->setVisible(ver);
+    if (mauthCodeEdit) mauthCodeEdit->setVisible(ver);
+    if (mauthVerifyBtn) mauthVerifyBtn->setVisible(ver);
+    if (mauthResendBtn) mauthResendBtn->setVisible(ver);
+    if (mauthBackBtn) mauthBackBtn->setVisible(ver);
+
+    if (mauthTitle) mauthTitle->setText(ver ? tr("Подтверждение") : (mauthRegisterMode ? tr("Создание аккаунта Trackly") : tr("Вход в Trackly")));
+    if (mauthSubtitle) mauthSubtitle->setText(ver ? tr("На указанную почту отправлен 6-значный код. Введите его ниже:") : QString());
+
+    if (ver) {
+        mauthCodeEdit->clear();
+        mauthCodeEdit->setFocus();
+    }
+}
+
 void MainWindow::applyBlur(bool enabled)
 {
     auto applyToWidget = [enabled](QWidget* w) {
@@ -1107,8 +1298,12 @@ void MainWindow::wire()
             });
     connect(m_core, &AppCore::saveSucceeded,
             this, [this](const QString& key) {
-                if (key == "medication_log" || key == "medication_log_cancelled") {
+                if (key == "medication_log" || key == "medication_log_cancelled"
+                    || key == "medicationlogdeleted") {
                     m_core->fetchMedicationLogs();
+                }
+                if (key == "medication_schedule") {
+                    m_core->fetchMedicationSchedules();
                 }
             });
 
@@ -1120,8 +1315,8 @@ void MainWindow::wire()
     connect(m_languageBtn, &QPushButton::clicked, this, [this]() {
         const QString now = m_core->language();
         if (now == "ru") m_core->applyLanguage("be");
-        else if (now == "be") m_core->applyLanguage("be-Latn");
-        else if (now == "be-Latn") m_core->applyLanguage("en");
+        else if (now == "be") m_core->applyLanguage("be_Latn");
+        else if (now == "be_Latn") m_core->applyLanguage("en");
         else m_core->applyLanguage("ru");
         retranslateUi();
     });
@@ -1176,43 +1371,22 @@ void MainWindow::wire()
                     m_examDropArea->setFiles({});
             });
 
-    connect(mauthSubmit, &QPushButton::clicked, this, [this] {
-        if (mauthRegisterMode) {
-            if (mauthAgreeCheckbox && !mauthAgreeCheckbox->isChecked()) {
-                showToast(
-                    m_central,
-                    tr("Отметьте согласие с политикой перед регистрацией."),
-                    ToastKind::Error,
-                    2800
-                    );
-                return;
-            }
-        }
-
-        setAuthBusy(true);
-
-        if (mauthRegisterMode) {
-            m_core->signUp(
-                mauthEmailEdit->text(),
-                mauthPasswordEdit->text(),
-                mauthNameEdit->text()
-                );
-        } else {
-            m_core->signIn(
-                mauthEmailEdit->text(),
-                mauthPasswordEdit->text()
-                );
-        }
-    });
-
-
     connect(m_core, &AppCore::authSucceeded, this, [this] {
         setAuthBusy(false);
-        hideAuthOverlay();
-        showToast(m_central, tr("Добро пожаловать в Trackly!"),
-                          ToastKind::Success, 2200);
-        if (m_navProfile)
-            m_navProfile->setText(m_core->currentEmail());
+        if (mauthAwaitingVerification) return;
+        // Основная логика в buildAuthOverlay. Здесь только сброс busy + фетчи.
+        if (!mauthVerificationMode) {
+            hideAuthOverlay();
+            if (m_navProfile)
+                m_navProfile->setText(m_core->currentEmail().section('@', 0, 0));
+            m_core->fetchMedications();
+            m_core->fetchMedicationSchedules();
+            m_core->fetchMedicationLogs();
+            m_core->fetchDashboard();
+            m_core->fetchProfile();
+            m_core->fetchAttachments();
+            m_core->fetchTriggers();
+        }
     });
 
     connect(m_core, &AppCore::medicationSchedulesLoaded,
@@ -1227,8 +1401,12 @@ void MainWindow::wire()
 
     connect(m_core, &AppCore::saveSucceeded,
             this, [this](const QString& key) {
-                if (key == "medication_log" || key == "medication_log_cancelled") {
+                if (key == "medication_log" || key == "medication_log_cancelled"
+                    || key == "medicationlogdeleted") {
                     m_core->fetchMedicationLogs();
+                }
+                if (key == "medication_schedule") {
+                    m_core->fetchMedicationSchedules();
                 }
             });
 
@@ -1239,6 +1417,16 @@ void MainWindow::wire()
 
     connect(m_core, &AppCore::medicationCreated,
             this, [this](const QJsonObject& med) {
+                const QString medId = med.value("id").toString();
+                if (!medId.isEmpty()) {
+                    m_medicationScheduleDates[medId] = {m_pendingMedStartDate, m_pendingMedEndDate};
+                    QSettings s("Trackly", "Trackly");
+                    s.setValue("medication/" + medId + "/sched_start", m_pendingMedStartDate);
+                    s.setValue("medication/" + medId + "/sched_end", m_pendingMedEndDate);
+                    m_pendingMedStartDate = QDate();
+                    m_pendingMedEndDate   = QDate();
+                    m_pendingMedNoEndDate = false;
+                }
                 createMedicationSchedulesFor(med);
             });
 
@@ -1265,7 +1453,6 @@ void MainWindow::wire()
     connect(m_core, &AppCore::saveSucceeded, this, [this](const QString& key) {
         showToast(m_central, successMessageFor(key), ToastKind::Success, 2600);
         m_core->fetchDashboard();
-        m_core->fetchProfile();
         m_core->fetchTriggers();
         refreshDayMedicationSummary();
     });
@@ -1302,29 +1489,212 @@ void MainWindow::wire()
 
     if (!m_core->hasSavedSession() || !m_core->isAuthenticated())
         showAuthOverlay(true);
+    else if (m_navProfile && m_core->isAuthenticated())
+        m_navProfile->setText(m_core->currentEmail().section('@', 0, 0));
 }
 
 void MainWindow::retranslateUi()
 {
-    if (m_title && m_stack && m_stack->currentIndex() == 0) {
-        m_title->setText(tr("Дашборд"));
+    if (!m_stack) return;
+
+    const int currentIdx = m_stack->currentIndex();
+
+    // ── Сохраняем состояние формы приступов перед пересозданием ──
+    QString savedSeizureEditId = m_editSeizureId;
+
+    // ── Сбрасываем указатели на виджеты (будут пересозданы) ──
+    m_dashboardCalendar = nullptr;
+    m_dashboardExamHost = nullptr;
+    m_dashboardExamLayout = nullptr;
+    m_summary1 = m_summary2 = m_summary3 = m_summary4 = nullptr;
+    m_dashboardReportBtn = nullptr;
+
+    m_seizureDate = nullptr;
+    m_seizurePlace = nullptr;
+    m_seizureType = nullptr;
+    m_seizureTriggers = nullptr;
+    m_seizurePost = nullptr;
+    m_seizureSeverity = nullptr;
+    m_seizureNotes = nullptr;
+    m_saveSeizureBtn = nullptr;
+
+    m_medCalendar = nullptr;
+    m_dayMedicationHost = nullptr;
+    m_dayMedicationLayout = nullptr;
+    m_medTitle = nullptr;
+    m_medTherapy = nullptr;
+    m_medDose = nullptr;
+    m_medTimesPerDay = nullptr;
+    m_medTimes = nullptr;
+    m_medStock = nullptr;
+    m_medCardsHost = nullptr;
+    m_medCardsLayout = nullptr;
+    m_saveMedicationBtn = nullptr;
+    m_openMedicationDialogBtn = nullptr;
+    m_medsTab = nullptr;
+    m_todayIntakesHost = nullptr;
+    m_todayIntakesLayout = nullptr;
+    m_intakesDateEdit = nullptr;
+    m_medInn = nullptr;
+    m_medDoseTablets = nullptr;
+    m_medStockTablets = nullptr;
+
+    m_examType = nullptr;
+    m_examSubtype = nullptr;
+    m_examDate = nullptr;
+    m_examNotes = nullptr;
+    m_saveExamBtn = nullptr;
+    m_pastExamHost = nullptr;
+    m_pastExamLayout = nullptr;
+    m_plannedExamHost = nullptr;
+    m_plannedExamLayout = nullptr;
+    m_examDropArea = nullptr;
+
+    m_analyticsHost = nullptr;
+    m_analyticsLayout = nullptr;
+    m_analyticsPeriodCombo = nullptr;
+    m_analyticsFromDate = nullptr;
+    m_analyticsToDate = nullptr;
+    m_analyticsCustomRange = nullptr;
+    m_aiAnalyticsBtn = nullptr;
+    m_aiPlaceholder = nullptr;
+    m_aiResultLabel = nullptr;
+    m_exportAnalyticsPdfBtn = nullptr;
+
+    m_triggerKind = nullptr;
+    m_triggerDate = nullptr;
+    m_moodScore = nullptr;
+    m_sleepHours = nullptr;
+    m_sleepQuality = nullptr;
+    m_triggerTitle = nullptr;
+    m_triggerTags = nullptr;
+    m_triggerNote = nullptr;
+    m_saveTriggerBtn = nullptr;
+    m_triggerListHost = nullptr;
+    m_triggerListLayout = nullptr;
+
+    m_avatarPreview = nullptr;
+    m_profileFullName = nullptr;
+    m_profileBirthDate = nullptr;
+    m_profileStatus = nullptr;
+    m_profileAbout = nullptr;
+    m_profileGender = nullptr;
+    m_profilePhone = nullptr;
+    m_profileEmail = nullptr;
+    m_profileAddress = nullptr;
+    m_profileEmergency = nullptr;
+    m_profileDoctor = nullptr;
+    m_profileDiagnosis = nullptr;
+
+    // ── Удаляем все страницы из стека ──
+    while (m_stack->count() > 0) {
+        QWidget* w = m_stack->widget(0);
+        m_stack->removeWidget(w);
+        delete w;
     }
 
+    // ── Пересоздаём все страницы (tr() вызовется с новым языком) ──
+    m_stack->addWidget(createDashboardPage());   // 0
+    m_stack->addWidget(createSeizuresPage());    // 1
+    m_stack->addWidget(createMedicinesPage());   // 2
+    m_stack->addWidget(createExamsPage());       // 3
+    m_stack->addWidget(createAnalyticsPage());   // 4
+    m_stack->addWidget(createTriggersPage());    // 5
+    m_stack->addWidget(createProfilePage());     // 6
+
+    m_editSeizureId = savedSeizureEditId;
+
+    // ── Восстанавливаем текущую страницу ──
+    m_stack->setCurrentIndex(currentIdx);
+
+    // ── навигация ──
     if (m_navHome) m_navHome->setText(tr("Главная"));
     if (m_navSeizures) m_navSeizures->setText(tr("Приступы"));
     if (m_navMeds) m_navMeds->setText(tr("Лекарства"));
     if (m_navExams) m_navExams->setText(tr("Обследования"));
     if (m_navAnalytics) m_navAnalytics->setText(tr("Аналитика"));
-    if (m_navTriggers) m_navTriggers->setText(tr("Триггеры"));
-    if (m_navProfile) m_navProfile->setText(tr("Профиль"));
+    if (m_navTriggers) m_navTriggers->setText(tr("Самочувствие"));
+    if (m_navProfile) {
+        if (m_core->isAuthenticated())
+            m_navProfile->setText(m_core->currentEmail().section('@', 0, 0));
+        else
+            m_navProfile->setText(tr("Профиль"));
+    }
     if (m_themeBtn) m_themeBtn->setText(tr("Тема"));
     if (m_languageBtn) m_languageBtn->setText(tr("Язык"));
-    if (m_navAnalytics) m_navAnalytics->setText(tr("Аналитика"));
-    if (m_navTriggers) m_navTriggers->setText(tr("Самочувствие"));
+
+    // ── заголовок текущей страницы ──
+    if (m_title) {
+        if (currentIdx == 0) m_title->setText(tr("Дашборд"));
+        else if (currentIdx == 1) m_title->setText(tr("Приступы"));
+        else if (currentIdx == 2) m_title->setText(tr("Терапия"));
+        else if (currentIdx == 3) m_title->setText(tr("Обследования"));
+        else if (currentIdx == 4) m_title->setText(tr("Аналитика"));
+        else if (currentIdx == 5) m_title->setText(tr("Самочувствие"));
+        else if (currentIdx == 6) m_title->setText(tr("Профиль"));
+    }
+
+    // ── Восстанавливаем содержимое ВСЕХ страниц из кеша ──
+    fillSeizures(m_cachedSeizureItems);
+    fillMedications(m_cachedMedications);
+    fillExaminations(m_cachedExaminations);
+    refreshTriggersList();
+    fillProfile(m_cachedProfile);
+    refreshAnalyticsPage();
+    updateDashboardCalendarDecorations();
+    refreshDashboardDayDetails();
+
+    // ── Перезапрашиваем свежие данные ──
+    m_core->fetchDashboard();
+    m_core->fetchMedicationSchedules();
+    refreshDayMedicationSummary();
+
+    // ── auth overlay ──
+    if (mauthOverlay && mauthOverlay->isVisible()) {
+        if (mauthVerificationMode) {
+            if (mauthTitle) mauthTitle->setText(tr("Подтверждение"));
+            if (mauthCodeHint) mauthCodeHint->setText(tr("На указанную почту отправлен 6-значный код. Введите его ниже:"));
+            if (mauthVerifyBtn) mauthVerifyBtn->setText(tr("Подтвердить"));
+            if (mauthResendBtn) mauthResendBtn->setText(tr("Отправить ещё раз"));
+            if (mauthBackBtn) mauthBackBtn->setText(tr("← Назад ко входу"));
+        } else {
+            if (mauthTitle) mauthTitle->setText(mauthRegisterMode
+                ? tr("Создание аккаунта Trackly")
+                : tr("Вход в Trackly"));
+            mauthSubtitle->setText(mauthRegisterMode
+                ? tr("Присоединяйся и отслеживай своё состояние и прогресс лечения.")
+                : tr("Введите email и пароль, чтобы продолжить."));
+            mauthNameEdit->setPlaceholderText(tr("Имя"));
+            mauthEmailEdit->setPlaceholderText(tr("E-mail..."));
+            mauthPasswordEdit->setPlaceholderText(tr("Пароль"));
+            mauthSubmit->setText(mauthRegisterMode
+                ? tr("Зарегистрироваться")
+                : tr("Войти"));
+            mauthSwitch->setText(mauthRegisterMode
+                ? tr("Уже есть аккаунт")
+                : tr("Создать аккаунт"));
+        }
+    }
+
+    // ── help overlay (rebuild for retranslation) ──
+    if (m_helpOverlay) {
+        bool wasVisible = m_helpOverlay->isVisible();
+        delete m_helpOverlay;
+        m_helpOverlay = nullptr;
+        m_helpCard = nullptr;
+        m_helpTextLabel = nullptr;
+        m_helpMailBtn = nullptr;
+        buildHelpOverlay();
+        if (wasVisible) m_helpOverlay->show();
+    }
+
+    // ── topbar ──
+    if (m_topbarReportBtn) m_topbarReportBtn->setText(tr("Отчёт о здоровье"));
+    if (m_topbarAiBtn) m_topbarAiBtn->setText(tr("AI"));
+    if (m_topbarExportPdfBtn) m_topbarExportPdfBtn->setText(tr("Экспорт PDF"));
 
     updateSidebarUi();
-    refreshAnalyticsPage();
-    refreshTriggersList();
+    updateIcons();
 }
 
 void MainWindow::openEmergencyCall()
@@ -1359,38 +1729,38 @@ void MainWindow::openEmergencyEmail()
     const QString to = m_profileEmergency ? m_profileEmergency->text().trimmed() : QString();
 
     if (to.isEmpty()) {
-        QMessageBox::information(
-            this,
-            tr("Нет email"),
-            tr("Укажите email экстренного контакта в поле профиля."));
+        showToast(m_central, tr("Укажите email экстренного контакта в профиле"), ToastKind::Error, 3000);
         return;
     }
 
     if (!to.contains('@')) {
-        QMessageBox::warning(
-            this,
-            tr("Неверный email"),
-            tr("Для отправки письма в поле экстренного контакта должен быть email."));
+        showToast(m_central, tr("В поле экстренного контакта должен быть email"), ToastKind::Error, 3000);
         return;
     }
 
-    QString patientName = m_profileFullName ? m_profileFullName->text().trimmed() : QString();
-    if (patientName.isEmpty()) patientName = tr("Пользователь Trackly");
+    // Берём имя из кеша профиля (надёжнее чем виджет, который мог быть пересоздан)
+    QString patientName = m_cachedProfile.value("full_name").toString().trimmed();
+    if (patientName.isEmpty() && m_profileFullName)
+        patientName = m_profileFullName->text().trimmed();
+    if (patientName.isEmpty())
+        patientName = m_core->currentEmail().section('@', 0, 0);
+    if (patientName.isEmpty())
+        patientName = tr("Пользователь Trackly");
 
-    const QString text = tr("Возможен эпилептический приступ. "
-                            "Проверьте состояние пользователя и свяжитесь с ним как можно скорее.");
+    const QString nowStr = QDateTime::currentDateTime().toString("dd MMMM yyyy, HH:mm");
+
+    const QString text = tr("Экстренное уведомление от %1.\n"
+                            "Отправлено: %2.\n\n"
+                            "Возможен эпилептический приступ. Проверьте состояние пользователя и свяжитесь с ним как можно скорее.")
+                            .arg(patientName, nowStr);
 
     m_core->sendEmergencyEmail(to, patientName, text);
-    showToast(m_central, tr("Запрос на отправку экстренного email отправлен."), ToastKind::Info, 2600);
+    showToast(m_central, tr("Экстренное уведомление отправлено на %1").arg(to), ToastKind::Info, 2600);
 }
 
 void MainWindow::createPdfReport()
 {
-    QMessageBox::information(
-        this,
-        tr("Отчёт"),
-        tr("Экспорт PDF пока реализован как заглушка. "
-           "Сейчас можно собрать данные с дашборда, приступов, лекарств и обследований в следующем шаге."));
+    showReportDialog();
 }
 
 void MainWindow::changeEvent(QEvent* event)
@@ -1415,11 +1785,98 @@ void MainWindow::resizeEvent(QResizeEvent* event)
     }
 
     repositionToast(m_central);
+    positionAiWidgets();
 
     if (mauthOverlay && mauthLangBtn) {
         const int margin = 18;
         const int x = margin;
         const int y = mauthOverlay->height() - mauthLangBtn->height() - margin;
         mauthLangBtn->move(x, qMax(0, y));
+    }
+}
+
+// --- showConfirmDialog --- (общий хелпер с блюром)
+bool MainWindow::showConfirmDialog(const QString& title, const QString& message)
+{
+    auto* central = this->centralWidget();
+    QGraphicsBlurEffect* blur = nullptr;
+    if (central) {
+        blur = new QGraphicsBlurEffect(central);
+        blur->setBlurRadius(6.0);
+        blur->setBlurHints(QGraphicsBlurEffect::QualityHint);
+        central->setGraphicsEffect(blur);
+    }
+
+    QDialog dlg(this);
+    dlg.setModal(true);
+    dlg.setWindowFlag(Qt::FramelessWindowHint, true);
+    dlg.setAttribute(Qt::WA_TranslucentBackground, true);
+    dlg.setWindowTitle(title);
+
+    auto* outer = new QVBoxLayout(&dlg);
+    outer->setContentsMargins(16, 16, 16, 16);
+    outer->setSpacing(12);
+
+    auto* card = new QFrame(&dlg);
+    card->setObjectName("SectionCard");
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(14);
+
+    auto* titleLbl = new QLabel(title, card);
+    titleLbl->setObjectName("SectionTitle");
+    titleLbl->setWordWrap(true);
+
+    auto* msgLbl = new QLabel(message, card);
+    msgLbl->setObjectName("MutedLabel");
+    msgLbl->setWordWrap(true);
+
+    auto* btnRow = new QHBoxLayout;
+    btnRow->addStretch();
+
+    auto* noBtn = new QPushButton(tr("Отмена"), card);
+    noBtn->setObjectName("SecondaryButton");
+
+    auto* yesBtn = new QPushButton(tr("Да"), card);
+    yesBtn->setObjectName("PrimaryButton");
+
+    btnRow->addWidget(noBtn);
+    btnRow->addWidget(yesBtn);
+
+    layout->addWidget(titleLbl);
+    layout->addWidget(msgLbl);
+    layout->addStretch();
+    layout->addLayout(btnRow);
+
+    outer->addWidget(card);
+
+    bool result = false;
+    connect(yesBtn, &QPushButton::clicked, &dlg, [&]() { result = true; dlg.accept(); });
+    connect(noBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+
+    dlg.exec();
+
+    if (central) {
+        central->setGraphicsEffect(nullptr); // setGraphicsEffect(nullptr) сам удаляет старый
+    }
+
+    return result;
+}
+
+// --- showBlurredDialog --- (накладывает блюр, exec диалога, убирает блюр)
+void MainWindow::showBlurredDialog(QDialog* dlg)
+{
+    auto* central = this->centralWidget();
+    if (central && dlg) {
+        auto* blur = new QGraphicsBlurEffect(central);
+        blur->setBlurRadius(6.0);
+        blur->setBlurHints(QGraphicsBlurEffect::QualityHint);
+        central->setGraphicsEffect(blur);
+
+        dlg->exec();
+
+        central->setGraphicsEffect(nullptr); // сам удалит blur
+    } else if (dlg) {
+        dlg->exec();
     }
 }

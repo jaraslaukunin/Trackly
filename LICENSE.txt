@@ -1,0 +1,107 @@
+Trackly Desktop — дневник эпилепсии и контроля терапии
+Copyright (c) 2025–2026 jaraslaukunin — https://github.com/jaraslaukunin
+Все права защищены.
+
+ПРОПРИЕТАРНАЯ ЛИЦЕНЗИЯ. КОД ЗАКРЫТ ДЛЯ ИЗМЕНЕНИЯ.
+PROPRIETARY LICENSE. MODIFICATION OF THE CODE IS PROHIBITED.
+
+═══════════════════════════════════════════════════════════════════════════════
+РУССКАЯ ВЕРСИЯ
+═══════════════════════════════════════════════════════════════════════════════
+
+1. ЧТО РАЗРЕШЕНО
+
+   1.1. Просматривать и изучать исходный код репозитория.
+   1.2. Клонировать репозиторий и запускать приложение для личного
+        некоммерческого использования.
+   1.3. Ссылаться на репозиторий и делиться ссылкой на него.
+
+2. ЧТО ЗАПРЕЩЕНО
+
+   2.1. Изменять, дорабатывать, адаптировать, переводить, декомпилировать или
+        любым иным способом модифицировать исходный код, ресурсы и иные файлы
+        проекта.
+   2.2. Создавать производные произведения, в том числе форки с изменениями,
+        без письменного разрешения правообладателя.
+   2.3. Распространять, публиковать, продавать, сдавать в аренду,
+        сублицензировать или иным образом передавать код и/или приложение
+        третьим лицам.
+   2.4. Использовать код или приложение в коммерческих целях.
+   2.5. Удалять или изменять уведомления об авторских правах и текст настоящей
+        лицензии.
+   2.6. Использовать наименование «Trackly» и логотип проекта без разрешения
+        правообладателя.
+
+3. ФОРКИ НА GITHUB
+
+   Техническая возможность создать форк в рамках правил GitHub не означает
+   разрешения на изменение, распространение или коммерческое использование
+   кода. Любая модификация допускается только с письменного разрешения
+   правообладателя.
+
+4. ПРЕКРАЩЕНИЕ ДЕЙСТВИЯ
+
+   При нарушении любого из условий настоящей лицензии права, предоставленные
+   пунктом 1, прекращаются автоматически, и использование кода и приложения
+   должно быть немедленно остановлено.
+
+5. ОТКАЗ ОТ ГАРАНТИЙ
+
+   Программное обеспечение предоставляется «как есть», без каких-либо гарантий,
+   явных или подразумеваемых, включая гарантии товарной пригодности и
+   пригодности для конкретной цели. Правообладатель не несёт ответственности
+   за любые убытки, прямые или косвенные, возникшие в связи с использованием
+   или невозможностью использования кода и приложения.
+
+6. МЕДИЦИНСКАЯ ОГОВОРКА
+
+   Приложение не является медицинским изделием, не ставит диагнозы и не даёт
+   медицинских рекомендаций. Оно не заменяет консультацию врача.
+
+═══════════════════════════════════════════════════════════════════════════════
+ENGLISH VERSION
+═══════════════════════════════════════════════════════════════════════════════
+
+Copyright (c) 2025–2026 jaraslaukunin — https://github.com/jaraslaukunin
+All rights reserved.
+
+1. PERMITTED
+   - Viewing and studying the source code.
+   - Cloning the repository and running the application for personal,
+     non-commercial use.
+   - Linking to and sharing a link to this repository.
+
+2. PROHIBITED
+   - Modifying, adapting, translating, decompiling or otherwise altering the
+     source code, assets or any other project files.
+   - Creating derivative works, including modified forks, without the prior
+     written permission of the copyright holder.
+   - Distributing, publishing, selling, renting, sublicensing or otherwise
+     transferring the code and/or the application to third parties.
+   - Any commercial use of the code or the application.
+   - Removing or altering copyright notices or the text of this license.
+   - Using the "Trackly" name and logo without permission.
+
+3. FORKS
+   The technical ability to fork this repository under GitHub's terms does not
+   grant any right to modify, distribute or commercially use the code.
+
+4. TERMINATION
+   Any violation of these terms automatically terminates the permissions granted
+   in section 1, and use of the code and the application must stop immediately.
+
+5. DISCLAIMER OF WARRANTY
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY AND
+   FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE
+   LIABLE FOR ANY DAMAGES ARISING FROM THE USE OF OR INABILITY TO USE THE
+   SOFTWARE.
+
+6. MEDICAL DISCLAIMER
+   This application is not a medical device, does not diagnose and does not
+   provide medical advice. It is not a substitute for professional medical care.
+
+═══════════════════════════════════════════════════════════════════════════════
+Trackly Desktop — educational project. / Учебный проект.
+Для получения разрешения на изменение кода свяжитесь с правообладателем:
+https://github.com/jaraslaukunin

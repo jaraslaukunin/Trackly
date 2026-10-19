@@ -5,6 +5,13 @@
 
 #include "appcore.h"
 #include "mainwindow.h"
+#include "utils.h"
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Секреты (адрес и anon key Supabase, ключ AI-прокси) НЕ хранятся в коде.
+//  Значения читаются через tracklyConfigValue() — см. .env.example и
+//  trackly.local.example.json.
+// ─────────────────────────────────────────────────────────────────────────────
 
 int main(int argc, char *argv[])
 {
@@ -24,13 +31,16 @@ int main(int argc, char *argv[])
         }
     }
 
-    AppCore core;
-    core.setSupabaseConfig(
-        "https://your-project-ref.supabase.co",
-        "REMOVED_ANON_KEY"
-        );
-
     QSettings settings("Trackly", "Trackly");
+
+    const QString supabaseUrl = tracklyConfigValue(
+        "TRACKLY_SUPABASE_URL", QStringLiteral("supabase_url"), QStringLiteral("supabase/url"));
+    const QString supabaseAnonKey = tracklyConfigValue(
+        "TRACKLY_SUPABASE_ANON_KEY", QStringLiteral("supabase_anon_key"), QStringLiteral("supabase/anon_key"));
+
+    AppCore core;
+    core.setSupabaseConfig(supabaseUrl, supabaseAnonKey);
+
     core.applyTheme(static_cast<AppCore::ThemeMode>(settings.value("ui/theme", 0).toInt()));
     core.applyLanguage(settings.value("ui/language", "ru").toString());
 

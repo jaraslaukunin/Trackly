@@ -184,6 +184,23 @@ QLabel#MiniCardLabel {
     color: #7C7198;
 }
 
+QLineEdit#ProfileNameEdit {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #1A1A2E;
+}
+
+QLineEdit#ProfileEmailEdit {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 13px;
+    color: #7B7B9A;
+}
+
 QLabel#BadgeLabel {
     background: #F1ECFF;
     color: #5C45D3;
@@ -263,6 +280,14 @@ QSpinBox {
     selection-color: white;
 }
 
+QLineEdit:disabled,
+QTextEdit:disabled,
+QLineEdit[readOnly="true"],
+QTextEdit[readOnly="true"] {
+    color: #A5A0B8;
+    background: #1A1525;
+}
+
 QLineEdit:focus,
 QTextEdit:focus,
 QComboBox:focus,
@@ -280,6 +305,31 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
+    image: url(:/icons/chevron-down.svg);
+    width: 14px;
+    height: 14px;
+}
+
+QComboBox QAbstractItemView {
+    background: #FFFEFF;
+    color: #241A34;
+    selection-background-color: #F0EAFF;
+    selection-color: #231A34;
+    border: 1px solid #E2D8F0;
+    border-radius: 10px;
+    padding: 4px;
+    outline: none;
+}
+
+QDateEdit::drop-down,
+QDateTimeEdit::drop-down {
+    border: none;
+    width: 26px;
+    background: transparent;
+}
+
+QDateEdit::down-arrow,
+QDateTimeEdit::down-arrow {
     image: url(:/icons/chevron-down.svg);
     width: 14px;
     height: 14px;
@@ -387,6 +437,19 @@ QCalendarWidget QAbstractItemView {
     padding: 10px;
 }
 
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background: #FFFEFF;
+    border-bottom: 1px solid #E1D8F4;
+}
+
+QCalendarWidget QMenu {
+    background: #FFFEFF;
+    color: #241A34;
+    border: 1px solid #E1D8F4;
+    border-radius: 10px;
+    padding: 4px;
+}
+
 /* --- AVATAR / HELP OVERLAY (light) --- */
 
 QLabel#AvatarPreview {
@@ -405,6 +468,35 @@ QFrame#HelpOverlayCard {
     background: #FFFCFF;
     border: 1px solid #E4DCF8;
     border-radius: 28px;
+}
+
+QFrame#HelpOverlayCard QLabel#SectionTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #231A34;
+    margin-bottom: 4px;
+}
+
+QFrame#HelpOverlayCard QLabel#MutedLabel {
+    font-size: 12px;
+    color: #786C98;
+    margin-bottom: 16px;
+}
+
+QLabel#HelpStepText {
+    font-size: 13px;
+    color: #3D3555;
+    line-height: 1.5;
+}
+
+QLabel#HelpOverlayWarning {
+    background: #FEF2F2;
+    border-left: 3px solid #DC2626;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #991B1B;
+    line-height: 1.5;
 }
 
 QLabel#HelpOverlayText {
@@ -524,6 +616,50 @@ QFrame#FeedCardTaken {
 QFrame#FeedCardMissed {
     background: #FDE7E9;
     border-radius: 16px;
+}
+
+QLabel#LowStockWarning {
+    color: #DC2626;
+    font-weight: bold;
+    font-size: 12px;
+    background: transparent;
+}
+
+QPushButton#AiFabButton {
+    background: #74AA9C;
+    border-radius: 28px;
+    border: none;
+}
+QPushButton#AiFabButton:hover {
+    background: #5E9A8C;
+}
+QPushButton#AiTopbarButton {
+    background: rgba(116, 170, 156, 0.12);
+    border-radius: 8px;
+    border: none;
+    color: #5E9A8C;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 4px 12px;
+}
+QPushButton#AiTopbarButton:hover {
+    background: rgba(116, 170, 156, 0.25);
+}
+QLabel#AiResultCard {
+    background: #FFFFFF;
+    border-radius: 16px;
+    border: 1px solid rgba(116, 170, 156, 0.3);
+    padding: 0;
+}
+QPushButton#AiCloseBtn {
+    background: transparent;
+    color: #94A3B8;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+}
+QPushButton#AiCloseBtn:hover {
+    color: #DC2626;
 }
 
 /* --- INTAKE CELLS (приёмы за день, light) --- */
@@ -792,6 +928,23 @@ QLabel#MiniCardLabel {
     color: #A094BE;
 }
 
+QLineEdit#ProfileNameEdit {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: #F6F1FF;
+}
+
+QLineEdit#ProfileEmailEdit {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 13px;
+    color: #A094BE;
+}
+
 QLabel#BadgeLabel {
     background: #2C2444;
     color: #C9BCFF;
@@ -871,6 +1024,14 @@ QSpinBox {
     selection-color: white;
 }
 
+QLineEdit:disabled,
+QTextEdit:disabled,
+QLineEdit[readOnly="true"],
+QTextEdit[readOnly="true"] {
+    color: #A5A0B8;
+    background: #1A1525;
+}
+
 QLineEdit:focus,
 QTextEdit:focus,
 QComboBox:focus,
@@ -888,6 +1049,31 @@ QComboBox::drop-down {
 }
 
 QComboBox::down-arrow {
+    image: url(:/icons/chevron-down.svg);
+    width: 14px;
+    height: 14px;
+}
+
+QComboBox QAbstractItemView {
+    background: #1F1929;
+    color: #F4EEFF;
+    selection-background-color: #2F2740;
+    selection-color: #F4EEFF;
+    border: 1px solid #3A3050;
+    border-radius: 10px;
+    padding: 4px;
+    outline: none;
+}
+
+QDateEdit::drop-down,
+QDateTimeEdit::drop-down {
+    border: none;
+    width: 26px;
+    background: transparent;
+}
+
+QDateEdit::down-arrow,
+QDateTimeEdit::down-arrow {
     image: url(:/icons/chevron-down.svg);
     width: 14px;
     height: 14px;
@@ -995,6 +1181,19 @@ QCalendarWidget QAbstractItemView {
     padding: 10px;
 }
 
+QCalendarWidget QWidget#qt_calendar_navigationbar {
+    background: #1F1929;
+    border-bottom: 1px solid #3A304C;
+}
+
+QCalendarWidget QMenu {
+    background: #1F1929;
+    color: #F4EEFF;
+    border: 1px solid #3A304C;
+    border-radius: 10px;
+    padding: 4px;
+}
+
 /* --- AVATAR / HELP (dark) --- */
 
 QLabel#AvatarPreview {
@@ -1013,6 +1212,35 @@ QFrame#HelpOverlayCard {
     background: #221B2E;
     border: 1px solid #3A304C;
     border-radius: 28px;
+}
+
+QFrame#HelpOverlayCard QLabel#SectionTitle {
+    font-size: 16px;
+    font-weight: 700;
+    color: #F3EEFF;
+    margin-bottom: 4px;
+}
+
+QFrame#HelpOverlayCard QLabel#MutedLabel {
+    font-size: 12px;
+    color: #94A3B8;
+    margin-bottom: 16px;
+}
+
+QLabel#HelpStepText {
+    font-size: 13px;
+    color: #D0CCE0;
+    line-height: 1.5;
+}
+
+QLabel#HelpOverlayWarning {
+    background: #3B1515;
+    border-left: 3px solid #DC2626;
+    border-radius: 0 8px 8px 0;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #FCA5A5;
+    line-height: 1.5;
 }
 
 /* --- AUTH: overlay (dark) --- */
@@ -1127,6 +1355,50 @@ QFrame#FeedCardTaken {
 QFrame#FeedCardMissed {
     background: #3F1A23;   /* тёмно-красновато-бордовый */
     border-radius: 16px;
+}
+
+QLabel#LowStockWarning {
+    color: #F87171;
+    font-weight: bold;
+    font-size: 12px;
+    background: transparent;
+}
+
+QPushButton#AiFabButton {
+    background: #74AA9C;
+    border-radius: 28px;
+    border: none;
+}
+QPushButton#AiFabButton:hover {
+    background: #5E9A8C;
+}
+QPushButton#AiTopbarButton {
+    background: rgba(116, 170, 156, 0.12);
+    border-radius: 8px;
+    border: none;
+    color: #5E9A8C;
+    font-weight: bold;
+    font-size: 12px;
+    padding: 4px 12px;
+}
+QPushButton#AiTopbarButton:hover {
+    background: rgba(116, 170, 156, 0.25);
+}
+QLabel#AiResultCard {
+    background: #1F1A2E;
+    border-radius: 16px;
+    border: 1px solid rgba(116, 170, 156, 0.25);
+    padding: 0;
+}
+QPushButton#AiCloseBtn {
+    background: transparent;
+    color: #64748B;
+    font-size: 16px;
+    font-weight: bold;
+    border: none;
+}
+QPushButton#AiCloseBtn:hover {
+    color: #F87171;
 }
 
 /* --- INTAKE CELLS (приёмы за день, dark) --- */

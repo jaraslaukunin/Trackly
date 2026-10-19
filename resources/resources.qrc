@@ -17,5 +17,11 @@
         <file>icons/check.svg</file>
         <file>icons/person.svg</file>
         <file>icons/emergency.svg</file>
+        <file>icons/chatgpt.svg</file>
+        <file>icons/delete.svg</file>
+        <file>icons/chevron-up-mini.svg</file>
+        <file>icons/chevron-down-mini.svg</file>
+        <file>icons/chevron-down.svg</file>
+        <file>icons/Trackly.ico</file>
     </qresource>
 </RCC>

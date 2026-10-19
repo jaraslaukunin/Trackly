@@ -1,11 +1,17 @@
 #include "utils.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QLayout>
 #include <QWidget>
 #include <QLayoutItem>
 #include <QObject>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QRegularExpression>
+#include <QSettings>
 
 QString formatIsoToLocal(const QString& iso)
 {
@@ -54,8 +60,21 @@ QString prettifyError(const QString& raw)
         return QObject::tr("Произошла ошибка.");
     }
 
-    s.remove(QRegularExpression("^\\{.*\"message\"\\s*:\\s*\""));
-    s.remove(QRegularExpression("\".*\\}$"));
+    // Пробуем распарсить JSON — вытащить error / message / msg
+    if (s.startsWith('{')) {
+        const auto doc = QJsonDocument::fromJson(s.toUtf8());
+        if (doc.isObject()) {
+            const auto obj = doc.object();
+            QString msg = obj.value("error_description").toString();
+            if (msg.isEmpty()) msg = obj.value("error").toString();
+            if (msg.isEmpty()) msg = obj.value("message").toString();
+            if (msg.isEmpty()) msg = obj.value("msg").toString();
+            if (!msg.isEmpty()) {
+                s = msg;
+            }
+        }
+    }
+
     s.replace("\\n", " ");
     s.replace("\\\"", "\"");
     s.replace(QRegularExpression("\\s+"), " ");
@@ -81,6 +100,47 @@ QString prettifyError(const QString& raw)
         return QObject::tr("Не удалось выполнить запрос. Проверь интернет и настройки Supabase.");
 
     return s.left(240);
+}
+
+// ─── Локальная конфигурация ─────────────────────────────────────────────────
+
+// Читает trackly.local.json из рабочей папки или рядом с исполняемым файлом.
+static QJsonObject loadLocalConfig()
+{
+    const QStringList candidates = {
+        QDir::current().filePath(QStringLiteral("trackly.local.json")),
+        QCoreApplication::applicationDirPath() + QStringLiteral("/trackly.local.json")
+    };
+
+    for (const QString& path : candidates) {
+        QFile file(path);
+        if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+            continue;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+        if (doc.isObject()) {
+            return doc.object();
+        }
+    }
+    return {};
+}
+
+QString tracklyConfigValue(const char* envName,
+                           const QString& jsonKey,
+                           const QString& settingsKey)
+{
+    QString value = qEnvironmentVariable(envName).trimmed();
+
+    if (value.isEmpty()) {
+        value = loadLocalConfig().value(jsonKey).toString().trimmed();
+    }
+
+    if (value.isEmpty()) {
+        QSettings settings(QStringLiteral("Trackly"), QStringLiteral("Trackly"));
+        value = settings.value(settingsKey).toString().trimmed();
+    }
+
+    return value;
 }
 
 QString successMessageFor(const QString& key)

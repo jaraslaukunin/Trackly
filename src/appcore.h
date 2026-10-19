@@ -1,6 +1,10 @@
 #pragma once
 
 #include <QObject>
+
+#ifdef Q_OS_MACOS
+void sendMacNotification(const QString& title, const QString& body);
+#endif
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QDateTime>
@@ -11,6 +15,7 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
+class QTranslator;
 
 class AppCore : public QObject
 {
@@ -24,6 +29,7 @@ public:
     };
 
     explicit AppCore(QObject* parent = nullptr);
+    ~AppCore() override;
 
     void setSupabaseConfig(const QString& url, const QString& anonKey);
 
@@ -127,6 +133,15 @@ public:
                             const QString& subject = QString(),
                             const QString& text = QString());
 
+    // Верификация через Resend
+    void sendVerificationCode(const QString& email, const QString& name);
+    void verifyCode(const QString& email, const QString& code);
+
+    // AI-аналитика через proxyAPI
+    void setProxyApiKey(const QString& key);
+    bool hasProxyApiKey() const;
+    void requestAiAnalytics(const QJsonObject& analyticsData);
+
 signals:
     void authSucceeded();
     void authFailed(const QString& error);
@@ -154,6 +169,13 @@ signals:
 
     void examinationCreated(const QJsonObject& exam);
     void attachmentsReady(const QJsonArray& attachments);
+    void aiAnalyticsReady(const QString& summary);
+    void aiAnalyticsError(const QString& error);
+
+    void verificationCodeSent();
+    void verificationCodeError(const QString& error);
+    void codeVerified();
+    void codeVerifyError(const QString& error);
 
 private:
     void loadSession();
@@ -183,10 +205,12 @@ private:
 
     QJsonArray m_cachedAttachments;
 
+    QString m_proxyApiKey;
 
 
     ThemeMode m_themeMode = ThemeMode::Auto;
     QString m_language = "ru";
+    QTranslator* m_translator = nullptr;
 
     QString m_accessToken;
     QString m_refreshToken;

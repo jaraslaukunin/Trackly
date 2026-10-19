@@ -1,5 +1,6 @@
 #include "appcore.h"
 #include "styles.h"
+#include "utils.h"
 
 #include <QApplication>
 #include <QFile>
@@ -23,6 +24,19 @@ AppCore::AppCore(QObject* parent)
     , m_net(new QNetworkAccessManager(this))
 {
     loadSession();
+
+    // Ключ AI-прокси не хранится в исходниках — см. tracklyConfigValue().
+    m_proxyApiKey = tracklyConfigValue(
+        "TRACKLY_AI_PROXY_KEY", QStringLiteral("ai_proxy_key"), QStringLiteral("ai/proxy_api_key"));
+}
+
+AppCore::~AppCore()
+{
+    if (m_translator) {
+        qApp->removeTranslator(m_translator);
+        delete m_translator;
+        m_translator = nullptr;
+    }
 }
 
 void AppCore::setSupabaseConfig(const QString& url, const QString& anonKey)
@@ -60,9 +74,30 @@ AppCore::ThemeMode AppCore::themeMode() const
 
 void AppCore::applyLanguage(const QString& languageCode)
 {
+    if (m_language == languageCode && m_translator)
+        return;
+
     m_language = languageCode;
     QSettings s("Trackly", "Trackly");
     s.setValue("ui/language", languageCode);
+
+    // снимаем старый переводчик
+    if (m_translator) {
+        qApp->removeTranslator(m_translator);
+        delete m_translator;
+        m_translator = nullptr;
+    }
+
+    // загружаем новый .qm из ресурсов (qt_add_translations вшивает их в :/i18n/)
+    m_translator = new QTranslator(this);
+    const QString qmPath = QStringLiteral(":/i18n/trackly_%1").arg(languageCode);
+    if (m_translator->load(qmPath)) {
+        qApp->installTranslator(m_translator);
+    } else {
+        qDebug() << "AppCore: translator not found for" << languageCode << "at" << qmPath;
+        delete m_translator;
+        m_translator = nullptr;
+    }
 }
 
 QString AppCore::language() const
@@ -678,9 +713,9 @@ void AppCore::signUp(const QString& email, const QString& password, const QStrin
                           ? QDateTime::currentDateTimeUtc().addSecs(expiresIn)
                           : QDateTime();
 
-        if (m_accessToken.isEmpty() || m_refreshToken.isEmpty() || m_userId.isEmpty()) {
+        if (m_userId.isEmpty() || m_accessToken.isEmpty() || m_refreshToken.isEmpty()) {
             clearSession();
-            emit authFailed(tr("Регистрация завершена. Подтвердите email и затем войдите вручную."));
+            emit authFailed(tr("Не удалось завершить регистрацию. Проверьте настройки подтверждения email в Supabase."));
             return;
         }
 
@@ -706,16 +741,52 @@ void AppCore::rebuildDashboard()
 {
     QJsonObject obj;
 
-    obj["seizures_this_month"] = m_cachedSeizures.size();
-    obj["meds_today"] = m_cachedMedications.size();
-    obj["wellbeing_count"] = m_cachedTriggers.size();
-
-    if (!m_cachedExaminations.isEmpty()) {
-        const auto exam = m_cachedExaminations.first().toObject();
-        obj["next_exam"] = exam.value("planned_at").toString();
-    } else {
-        obj["next_exam"] = "";
+    // приступы за текущий месяц
+    const QDate today = QDate::currentDate();
+    int seizuresThisMonth = 0;
+    for (const auto& v : std::as_const(m_cachedSeizures)) {
+        QDateTime dt = QDateTime::fromString(v.toObject().value("started_at").toString(), Qt::ISODate);
+        if (dt.isValid() && dt.date().month() == today.month() && dt.date().year() == today.year())
+            seizuresThisMonth++;
     }
+    obj["seizures_this_month"] = seizuresThisMonth;
+
+    // приёмы за сегодня
+    int medsToday = 0;
+    for (const auto& v : std::as_const(m_cachedMedicationLogs)) {
+        QDateTime dt = QDateTime::fromString(v.toObject().value("taken_at").toString(), Qt::ISODate);
+        if (dt.isValid() && dt.date() == today)
+            medsToday++;
+    }
+    obj["meds_today"] = medsToday;
+
+    // обследований за текущий месяц
+    int examsThisMonth = 0;
+    QString nextExamDate;
+    const QDateTime now = QDateTime::currentDateTime();
+    QDateTime closestExamDt;
+    for (const auto& v : std::as_const(m_cachedExaminations)) {
+        const QJsonObject o = v.toObject();
+        QDateTime dt = QDateTime::fromString(o.value("planned_at").toString(), Qt::ISODate);
+        if (!dt.isValid()) continue;
+        if (dt.date().month() == today.month() && dt.date().year() == today.year())
+            examsThisMonth++;
+        if (dt >= now && (!closestExamDt.isValid() || dt < closestExamDt))
+            closestExamDt = dt;
+    }
+    obj["exams_this_month"] = examsThisMonth;
+    if (closestExamDt.isValid()) {
+        const auto& ex = std::find_if(m_cachedExaminations.begin(), m_cachedExaminations.end(),
+            [&](const QJsonValue& v) {
+                QDateTime dt = QDateTime::fromString(v.toObject().value("planned_at").toString(), Qt::ISODate);
+                return dt.isValid() && dt == closestExamDt;
+            });
+        if (ex != m_cachedExaminations.end()) {
+            const QString type = ex->toObject().value("exam_type").toString();
+            nextExamDate = closestExamDt.toLocalTime().toString("dd.MM.yyyy HH:mm") + " — " + type;
+        }
+    }
+    obj["next_exam"] = nextExamDate;
 
     if (!m_cachedProfile.isEmpty()) {
         const QString doctor = m_cachedProfile.value("doctor_name").toString().trimmed();
@@ -755,6 +826,7 @@ void AppCore::fetchDashboard()
 
     fetchSeizures();
     fetchMedications();
+    fetchMedicationSchedules();
     fetchExaminations();
     fetchProfile();
     fetchMedicationLogs();
@@ -1648,7 +1720,7 @@ void AppCore::updateProfile(const QJsonObject& obj)
             }
 
             emit saveSucceeded("profile");
-            fetchProfile();
+            // fetchProfile() не нужен — PATCH уже вернул актуальные данные
         });
     });
 }
@@ -1842,5 +1914,126 @@ void AppCore::sendEmergencyEmail(const QString& to,
 
             emit saveSucceeded("emergency_email");
         });
+    });
+}
+
+// ─── Верификация через Resend ─────────────────────────────────────────────
+
+void AppCore::sendVerificationCode(const QString& email, const QString& name)
+{
+    QNetworkRequest req(QUrl(m_supabaseUrl + "/functions/v1/send-verification-code"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setRawHeader("apikey", m_anonKey.toUtf8());
+
+    QJsonObject payload{
+        {"email", email.trimmed()},
+        {"name", name.trimmed()}
+    };
+
+    auto* reply = m_net->post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const auto raw = reply->readAll();
+        const auto err = reply->error();
+        reply->deleteLater();
+
+        if (err != QNetworkReply::NoError) {
+            const QString msg = QString::fromUtf8(raw);
+            emit verificationCodeError(msg.isEmpty() ? tr("Не удалось отправить код") : msg);
+            return;
+        }
+
+        emit verificationCodeSent();
+    });
+}
+
+void AppCore::verifyCode(const QString& email, const QString& code)
+{
+    QNetworkRequest req(QUrl(m_supabaseUrl + "/functions/v1/verify-code"));
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    req.setRawHeader("apikey", m_anonKey.toUtf8());
+
+    QJsonObject payload{
+        {"email", email.trimmed()},
+        {"code", code.trimmed()}
+    };
+
+    auto* reply = m_net->post(req, QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const auto raw = reply->readAll();
+        const auto err = reply->error();
+        reply->deleteLater();
+
+        if (err != QNetworkReply::NoError) {
+            const QString msg = QString::fromUtf8(raw);
+            emit codeVerifyError(msg.isEmpty() ? tr("Неверный код") : msg);
+            return;
+        }
+
+        emit codeVerified();
+    });
+}
+
+// ─── ProxyAPI AI-аналитика ───────────────────────────────────────────────
+
+void AppCore::setProxyApiKey(const QString& key)
+{
+    m_proxyApiKey = key.trimmed();
+    QSettings s("Trackly", "Trackly");
+    s.setValue("ai/proxy_api_key", m_proxyApiKey);
+}
+
+void AppCore::requestAiAnalytics(const QJsonObject& data)
+{
+    if (m_proxyApiKey.isEmpty()) {
+        emit aiAnalyticsError(tr("API-ключ proxyAPI не настроен."));
+        return;
+    }
+
+    QJsonObject body;
+    body["model"] = QStringLiteral("gpt-4o-mini");
+    body["max_tokens"] = 600;
+    body["temperature"] = 0.3;
+
+    QJsonArray msgs;
+    QJsonObject sys;
+    sys["role"] = QStringLiteral("system");
+    sys["content"] = QStringLiteral(
+        "Ты — ассистент для анализа медицинской статистики. "
+        "Дай КРАТКУЮ сводку (3-5 предложений) о трендах и корреляциях. "
+        "Не давай медицинских рекомендаций. Только статистика. На русском."
+    );
+    msgs.append(sys);
+
+    QJsonObject user;
+    user["role"] = QStringLiteral("user");
+    user["content"] = QString(QJsonDocument(data).toJson(QJsonDocument::Compact));
+    msgs.append(user);
+    body["messages"] = msgs;
+
+    QNetworkRequest req(QUrl("https://api.proxyapi.ru/openai/v1/chat/completions"));
+    req.setRawHeader("Authorization", QByteArray("Bearer ") + m_proxyApiKey.toUtf8());
+    req.setRawHeader("Content-Type", "application/json");
+
+    auto* reply = m_net->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+        const auto raw = reply->readAll();
+        const auto err = reply->error();
+        reply->deleteLater();
+
+        if (err != QNetworkReply::NoError) {
+            emit aiAnalyticsError(QString::fromUtf8(raw));
+            return;
+        }
+        const QJsonArray choices = QJsonDocument::fromJson(raw).object().value("choices").toArray();
+        if (choices.isEmpty()) {
+            emit aiAnalyticsError(tr("AI не вернул ответа."));
+            return;
+        }
+        const QString text = choices[0].toObject().value("message").toObject().value("content").toString();
+        if (text.isEmpty()) {
+            emit aiAnalyticsError(tr("Пустой ответ от AI."));
+            return;
+        }
+        emit aiAnalyticsReady(text);
     });
 }

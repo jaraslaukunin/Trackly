@@ -1,0 +1,14 @@
+# Нормализация переводов строк
+* text=auto eol=lf
+
+# Windows-скрипты остаются в CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Бинарные файлы
+*.png binary
+*.ico binary
+*.icns binary
+*.ttf binary
+*.qm binary
+*.svg text

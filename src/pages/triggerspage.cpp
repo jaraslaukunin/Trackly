@@ -492,7 +492,7 @@ void MainWindow::refreshTriggersList()
 
         // trash icon button
         auto* delBtn = new QPushButton(card);
-        delBtn->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
+        delBtn->setIcon(QIcon(":/icons/delete.svg"));
         delBtn->setIconSize(QSize(18, 18));
         delBtn->setFixedSize(32, 32);
         delBtn->setFlat(true);
@@ -547,10 +547,8 @@ void MainWindow::deleteTrigger(const QJsonObject& trigger)
 {
     const QString id = trigger.value("id").toString();
     if (id.isEmpty()) return;
-    const auto res = QMessageBox::question(this, tr("Удаление"),
-        tr("Удалить эту запись самочувствия?"),
-        QMessageBox::Yes | QMessageBox::No);
-    if (res == QMessageBox::Yes) m_core->deleteTrigger(id);
+    if (showConfirmDialog(tr("Удаление"), tr("Удалить эту запись самочувствия?")))
+        m_core->deleteTrigger(id);
 }
 
 // ─── Data fill ──────────────────────────────────────────────────────────────

@@ -1,0 +1,5 @@
+{
+  "supabase_url": "https://your-project-ref.supabase.co",
+  "supabase_anon_key": "your-anon-or-publishable-key",
+  "ai_proxy_key": "your-proxyapi-key"
+}

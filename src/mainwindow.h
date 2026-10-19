@@ -37,9 +37,9 @@ class QListWidgetItem;
 class QTextBrowser;
 class QPlainTextEdit;
 class QTimer;
-class QDateEdit;
 class QSystemTrayIcon;
 class ExamAttachmentDropArea;
+#include "tracklycalendar.h"
 
 class MainWindow : public QMainWindow
 {
@@ -105,7 +105,7 @@ private:
     QLabel* m_summary4 = nullptr;
     QPushButton* m_dashboardReportBtn = nullptr;
 
-    QCalendarWidget* m_dashboardCalendar = nullptr;
+    TracklyCalendar* m_dashboardCalendar = nullptr;
     QWidget* m_dashboardExamHost = nullptr;
     QVBoxLayout* m_dashboardExamLayout = nullptr;
     QMap<QDate, QStringList> m_dashboardEvents;
@@ -124,7 +124,7 @@ private:
     QString m_editSeizureId;
     QJsonArray m_cachedSeizureItems;
 
-    QCalendarWidget* m_medCalendar = nullptr;
+    TracklyCalendar* m_medCalendar = nullptr;
     QWidget* m_dayMedicationHost = nullptr;
     QVBoxLayout* m_dayMedicationLayout = nullptr;
     QLineEdit* m_medTitle = nullptr;
@@ -141,6 +141,10 @@ private:
     // новые
     QMap<QString, QString> m_medicationNamesById;   // medication_id -> title
     QMap<QString, QString> m_scheduleTitlesById;   // schedule_id -> human title
+    QMap<QString, QPair<QDate, QDate>> m_medicationScheduleDates; // medication_id -> (start, end)
+    QDate m_pendingMedStartDate;
+    QDate m_pendingMedEndDate;
+    bool  m_pendingMedNoEndDate = false;
     QMenu* m_dayIntakeContextMenu = nullptr;
     QAction* m_cancelIntakeAction = nullptr;
     QString m_contextMenuLogId;
@@ -181,8 +185,11 @@ private:
     QDateTime m_pendingExamDate;
 
     QLabel* m_avatarPreview = nullptr;
+    QPixmap m_cachedAvatarPixmap;
     QLineEdit* m_profileFullName = nullptr;
     QLineEdit* m_profileBirthDate = nullptr;
+    QLineEdit* m_profileStatus = nullptr;
+    QTextEdit* m_profileAbout = nullptr;
     QComboBox* m_profileGender = nullptr;
     QLineEdit* m_profilePhone = nullptr;
     QLineEdit* m_profileEmail = nullptr;
@@ -197,7 +204,15 @@ private:
     QWidget* m_analyticsHost = nullptr;
     QVBoxLayout* m_analyticsLayout = nullptr;
     QPushButton* m_exportAnalyticsPdfBtn = nullptr;
+    QComboBox* m_analyticsPeriodCombo = nullptr;
+    QDateEdit* m_analyticsFromDate = nullptr;
+    QDateEdit* m_analyticsToDate = nullptr;
+    QWidget* m_analyticsCustomRange = nullptr;
+    QPushButton* m_aiAnalyticsBtn = nullptr;
+    QLabel* m_aiPlaceholder = nullptr;
+    QLabel* m_aiResultLabel = nullptr;
     QPushButton* m_topbarReportBtn = nullptr;
+    QPushButton* m_topbarAiBtn = nullptr;
     QPushButton* m_topbarExportPdfBtn = nullptr;
 
     QComboBox* m_triggerKind = nullptr;
@@ -251,6 +266,18 @@ private:
     QLabel* mauthPolicyLinksLabel = nullptr;
     QLabel* mauthPersonalDataLinkLabel = nullptr;
 
+    // Verification mode
+    bool mauthVerificationMode = false;
+    bool mauthAwaitingVerification = false; // ждём ввода кода (блокирует authSucceeded)
+    QString mauthPendingEmail;
+    QString mauthPendingPassword;
+    QString mauthPendingName;
+    QLineEdit* mauthCodeEdit = nullptr;
+    QPushButton* mauthVerifyBtn = nullptr;
+    QPushButton* mauthResendBtn = nullptr;
+    QPushButton* mauthBackBtn = nullptr;
+    QLabel* mauthCodeHint = nullptr;
+
     QGraphicsBlurEffect* m_blurSidebar = nullptr;
     QGraphicsBlurEffect* m_blurContent = nullptr;
 
@@ -298,6 +325,7 @@ private:
                                          const QJsonObject& schedule,
                                          const QDate& date);
     void showIntakesForMedicationToday(const QString& medId);
+    void removeLogFromCache(const QString& logId);
 
     QFrame* makeAnalyticsStatCard(const QString& title,
                                   const QString& value,
@@ -308,6 +336,8 @@ private:
                              const QList<QPair<QString, int>>& items,
                              const QColor& color,
                              int maxItems = 6);
+    QChartView* makeAdherenceChart(const QList<QPair<QString, QPair<int, int>>>& dailyStats);
+    QChartView* makeSeizureFrequencyChart(const QMap<QDate, int>& byDay);
 
     QWidget* makeAnalyticsInsightsCard(const QStringList& insights);
     QWidget* makeAnalyticsEmptyState(const QString& text);
@@ -336,6 +366,7 @@ private:
     void cancelMedicationIntake();
 
     void handleEditIntakeTime();
+    void editIntakeTime(const QString& logId);
     void handleDeletePrnIntake();
     void handlePrnIntakeFromMedication();
 
@@ -385,6 +416,8 @@ private:
 
     void populateExamSubtypeOptions();
     void pickAvatar();
+    void showAvatarPreviewDialog();
+    void applyAvatarToPreview();
     void pickExamFile();
 
     void buildHelpOverlay();
@@ -396,6 +429,7 @@ private:
     void hideAuthOverlay();
     void setAuthRegisterMode(bool enabled);
     void setAuthBusy(bool busy);
+    void setVerificationMode(bool enabled);
     void applyBlur(bool enabled);
 
     void updateDashboardCalendarDecorations();
@@ -406,6 +440,10 @@ private:
     void deleteTrigger(const QJsonObject& trigger);
 
 
+    bool showConfirmDialog(const QString& title, const QString& message);
+    void showBlurredDialog(QDialog* dlg);
+    void showAiAnalyticsDialog();
+    void positionAiWidgets();
     void createAnalyticsPdfReport();
     QFrame* makeMedicationCard(const QJsonObject& med);
     void rebuildMedicationCards();
@@ -414,6 +452,11 @@ private:
     void openEmergencySms();
     void openEmergencyEmail();
     void createPdfReport();
+    void showReportDialog();
+    void generatePdfReport(const QDate& from, const QDate& to,
+                           bool includeMeds, bool includeSeizures,
+                           bool includeWellbeing, bool includeExams,
+                           bool includeCharts);
      void onMedicationsReady(const QJsonArray& meds);
 
     static QString formatTs(const QString& iso);
